@@ -1,0 +1,79 @@
+diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
+--- a/dist/src/index.d.ts
++++ b/dist/src/index.d.ts
+@@ -3 +3 @@
+-import { Awaitable as Awaitable_2 } from '..';
++import { Awaitable as Awaitable_2 } from 'miniflare';
+@@ -8 +8 @@
+-import { cspotcodeSourceMapSupport } from '@cspotcode/source-map-support';
++import * as cspotcodeSourceMapSupport from '@cspotcode/source-map-support';
+@@ -11,2 +11,2 @@
+-import { ExternalServer as ExternalServer_2 } from '../..';
+-import { ExternalServer as ExternalServer_3 } from '..';
++import { ExternalServer as ExternalServer_2 } from 'miniflare';
++import { ExternalServer as ExternalServer_3 } from 'miniflare';
+@@ -24,3 +24,3 @@
+-import { Json as Json_2 } from '..';
+-import { kCurrentWorker as kCurrentWorker_2 } from './core';
+-import { kUnsafeEphemeralUniqueKey as kUnsafeEphemeralUniqueKey_2 } from './shared';
++import { Json as Json_2 } from 'miniflare';
++type kCurrentWorker_2 = typeof kCurrentWorker;
++type kUnsafeEphemeralUniqueKey_2 = typeof kUnsafeEphemeralUniqueKey;
+@@ -29,3 +29,3 @@
+-import { Log as Log_2 } from '..';
+-import { Miniflare as Miniflare_2 } from '../..';
+-import { Miniflare as Miniflare_3 } from '..';
++import { Log as Log_2 } from 'miniflare';
++import { Miniflare as Miniflare_2 } from 'miniflare';
++import { Miniflare as Miniflare_3 } from 'miniflare';
+@@ -35,2 +35,2 @@
+-import { PeriodType as PeriodType_2 } from './ratelimit';
+-import { Plugin as Plugin_2 } from './shared';
++declare enum PeriodType_2 { TENSECONDS = 10, MINUTE = 60 }
++import { Plugin as Plugin_2 } from 'miniflare';
+@@ -45,3 +45,3 @@
+-import { RemoteProxyConnectionString as RemoteProxyConnectionString_2 } from '..';
+-import { RemoteProxyConnectionString as RemoteProxyConnectionString_3 } from './shared';
+-import { Request as Request_3 } from '../..';
++import { RemoteProxyConnectionString as RemoteProxyConnectionString_2 } from 'miniflare';
++import { RemoteProxyConnectionString as RemoteProxyConnectionString_3 } from 'miniflare';
++import { Request as Request_3 } from 'miniflare';
+@@ -50 +50 @@
+-import { Request as Request_6 } from '..';
++import { Request as Request_6 } from 'miniflare';
+@@ -61 +61 @@
+-import { Response as Response_3 } from '../..';
++import { Response as Response_3 } from 'miniflare';
+@@ -64 +64 @@
+-import { Response as Response_6 } from '..';
++import { Response as Response_6 } from 'miniflare';
+@@ -76 +76 @@
+-import { WorkerRegistry as WorkerRegistry_2 } from '..';
++import { WorkerRegistry as WorkerRegistry_2 } from 'miniflare';
+@@ -3543 +3543 @@
+-export declare function getFreshSourceMapSupport(): cspotcodeSourceMapSupport;
++export declare function getFreshSourceMapSupport(): typeof cspotcodeSourceMapSupport;
+@@ -4939 +4939 @@
+-    fetchMock: z.ZodOptional<z.ZodType<MockAgent<MockAgent>, z.ZodTypeDef, MockAgent<MockAgent>>>;
++    fetchMock: z.ZodOptional<z.ZodType<MockAgent<MockAgent.Options>, z.ZodTypeDef, MockAgent<MockAgent.Options>>>;
+@@ -5414 +5414 @@
+-    fetchMock?: MockAgent<MockAgent> | undefined;
++    fetchMock?: MockAgent<MockAgent.Options> | undefined;
+@@ -5583 +5583 @@
+-    fetchMock?: MockAgent<MockAgent> | undefined;
++    fetchMock?: MockAgent<MockAgent.Options> | undefined;
+@@ -5761 +5761 @@
+-    fetchMock?: MockAgent<MockAgent> | undefined;
++    fetchMock?: MockAgent<MockAgent.Options> | undefined;
+@@ -5941 +5941 @@
+-    fetchMock?: MockAgent<MockAgent> | undefined;
++    fetchMock?: MockAgent<MockAgent.Options> | undefined;
+@@ -6120 +6120 @@
+-    fetchMock?: MockAgent<MockAgent> | undefined;
++    fetchMock?: MockAgent<MockAgent.Options> | undefined;
+@@ -6315 +6315 @@
+-    fetchMock?: MockAgent<MockAgent> | undefined;
++    fetchMock?: MockAgent<MockAgent.Options> | undefined;
+@@ -6989 +6989 @@
+-    period: z.ZodDefault<z.ZodOptional<z.ZodNativeEnum<PeriodType_2>>>;
++    period: z.ZodDefault<z.ZodOptional<z.ZodNativeEnum<typeof PeriodType_2>>>;
