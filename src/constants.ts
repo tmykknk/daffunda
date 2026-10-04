@@ -46,3 +46,6 @@ export const WEEKDAY_NAMES = "日月火水木金土";
 
 export const MAX_REMINDER_ATTEMPTS = 3;
 export const REMINDER_STALE_AFTER_MS = 5 * MILLISECONDS_PER_MINUTE;
+
+// 公式「テキストメッセージ」: UTF-16符号単位で数える最大文字数。
+export const MAX_REPLY_TEXT_LENGTH = 5000;

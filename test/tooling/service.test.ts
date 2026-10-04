@@ -1,0 +1,62 @@
+import { readFileSync } from "node:fs";
+import * as v from "valibot";
+import { expect, test, vi } from "vitest";
+import { handleText } from "../../src/service/commands";
+
+const cases = v.parse(
+  v.array(v.object({ input: v.string(), expect: v.nullable(v.string()) })),
+  JSON.parse(readFileSync("test/fixtures/service-cases.json", "utf8")),
+);
+const now = new Date("2026-10-03T03:00:00.000Z");
+const unavailable = vi.fn((): never => {
+  throw new Error("DBに触れてはいけません");
+});
+const repos = {
+  items: { add: unavailable, remove: unavailable, list: unavailable },
+  reminders: {
+    create: unavailable,
+    listUnsent: unavailable,
+    cancel: unavailable,
+    claimDue: unavailable,
+    recoverStale: unavailable,
+    markSent: unavailable,
+    markFailed: unavailable,
+  },
+};
+
+for (const row of cases) {
+  test(`serviceの静的応答: ${row.input.slice(0, 24)}`, async () => {
+    expect(
+      await handleText(
+        { text: row.input, groupId: "C_test_group_1", userId: null, now },
+        repos,
+      ),
+    ).toBe(row.expect);
+  });
+}
+test("ヘルプには全コマンドと単発リマインダーの説明を含める", async () => {
+  const response = await handleText(
+    { text: "ヘルプ", groupId: "C_test_group_1", userId: null, now },
+    repos,
+  );
+  for (const command of [
+    "+",
+    "-",
+    "リスト",
+    "リマインド",
+    "リマインド削除",
+    "ヘルプ",
+    "単発",
+  ])
+    expect(response).toContain(command);
+  expect(unavailable).not.toHaveBeenCalled();
+});
+
+test("DBエラーは成功返信へ変換せず呼び出し元へ伝える", async () => {
+  await expect(
+    handleText(
+      { text: "+テスト品目", groupId: "C_test_group_1", userId: null, now },
+      repos,
+    ),
+  ).rejects.toThrow("DBに触れてはいけません");
+});

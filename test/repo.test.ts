@@ -4,6 +4,7 @@ import { beforeEach, expect, test } from "vitest";
 import { createItemsRepo } from "../src/repo/items";
 import { createEventsRepo } from "../src/repo/processed-events";
 import { createRemindersRepo } from "../src/repo/reminders";
+import { handleText } from "../src/service/commands";
 
 const group = "C_test_group_1";
 const otherGroup = "C_test_group_2";
@@ -304,4 +305,100 @@ test("不正なD1行を内部データとして返さない", async () => {
     .bind("invalid", "test-event-1")
     .run();
   await expect(events().get("test-event-1")).rejects.toThrow("D1_ROW_INVALID");
+});
+
+const reply = (text: string, groupId = group) =>
+  handleText(
+    { text, groupId, userId: user, now },
+    { items: items(), reminders: reminders() },
+  );
+
+test("serviceは混在した追加結果を入力順に返し、かな別名の重複も区別する", async () => {
+  await items().add(group, ["テスト品目1"], user, now);
+  expect(await reply("+テスト品目2 テスト品目1 みるく ミルク")).toBe(
+    "追加: テスト品目2、みるく\n登録済み: テスト品目1、ミルク",
+  );
+  expect(await reply("+テスト品目1")).toBe("登録済み: テスト品目1");
+  expect(await reply("+テスト品目1", otherGroup)).toBe("追加: テスト品目1");
+  expect(await items().list(group)).toHaveLength(3);
+});
+
+test("serviceの削除は入力表示名で結果を分け、照合別名でも1件ずつ消費する", async () => {
+  await reply("+ミルク テスト品目");
+  expect(await reply("-みるく ミルク 未登録")).toBe(
+    "削除: みるく\n見つからない: ミルク、未登録",
+  );
+  expect(await reply("-未登録")).toBe("見つからない: 未登録");
+  expect(await reply("-テスト品目", otherGroup)).toBe(
+    "見つからない: テスト品目",
+  );
+  expect(await reply("-テスト品目")).toBe("削除: テスト品目");
+});
+
+test("serviceの買い物一覧は追加順で表示し、空・かなコマンド・グループ分離を扱う", async () => {
+  expect(await reply("リスト")).toBe("リストは空です");
+  await reply("+テスト品目2 テスト品目1");
+  expect(await reply("りすと")).toBe("・テスト品目2\n・テスト品目1");
+  expect(await reply("リスト", otherGroup)).toBe("リストは空です");
+});
+
+test("serviceの登録・一覧・取消はJST日時と自グループのIDを使う", async () => {
+  expect(await reply("リマインド")).toBe("未送信リマインダーはありません");
+  expect(await reply("/テスト 明日15時")).toBe(
+    "登録 #1: テスト → 10/4(日) 15:00\n取消: リマインド削除 1",
+  );
+  expect(await reply("リマインド")).toBe("#1 10/4(日) 15:00 テスト");
+  expect(await reply("リマインド削除 1", otherGroup)).toBe("見つからない: #1");
+  expect(await reply("リマインド削除 1")).toBe("取消: #1");
+  expect(await reply("リマインド削除 1")).toBe("見つからない: #1");
+  expect(await reply("リマインド")).toBe("未送信リマインダーはありません");
+});
+
+test("serviceは長い登録の内容を保持して確認文だけ短縮する", async () => {
+  const content = "😀".repeat(3000);
+  const response = await reply(`/${content} 明日15時`);
+  expect(response?.length).toBeLessThanOrEqual(5000);
+  expect(response).toMatch(/^登録 #1: 😀/u);
+  expect(response).toContain("… → 10/4(日) 15:00\n取消: リマインド削除 1");
+  expect((await reminders().listUnsent(group))[0]?.content).toBe(content);
+  expect(await reply("リマインド")).toBe("…他1件");
+});
+
+test("serviceは既存の同名複数行を入力件数分だけ削除する", async () => {
+  await reply("+ミルク");
+  await env.DB.prepare(
+    "INSERT INTO items (group_id, name, norm_name, created_at) VALUES (?, ?, ?, ?)",
+  )
+    .bind(group, "みるく", "ミルク", now.toISOString())
+    .run();
+  expect(await reply("-みるく ミルク")).toBe("削除: みるく、ミルク");
+  expect(await items().list(group)).toEqual([]);
+});
+
+test("serviceの長い買い物一覧は行を省略し、件数とUTF-16上限を保つ", async () => {
+  const names = Array.from(
+    { length: 100 },
+    (_, index) => `${index}${"😀".repeat(40)}`,
+  );
+  await items().add(group, names, null, now);
+  const response = await reply("リスト");
+  if (!response) throw new Error("返信が空です");
+  const included = response.split("\n").length - 1;
+  expect(response.length).toBeLessThanOrEqual(5000);
+  expect(response).toBe(
+    [
+      ...names.slice(0, included).map((name) => `・${name}`),
+      `…他${names.length - included}件`,
+    ].join("\n"),
+  );
+  expect(await items().list(group)).toHaveLength(100);
+});
+
+test("serviceのリマインダー一覧は期限順で他グループを表示しない", async () => {
+  await reply("/後のテスト 明後日");
+  await reply("/先のテスト 明日");
+  await reply("/別のテスト 明日", otherGroup);
+  expect(await reply("リマインド")).toBe(
+    "#2 10/4(日) 09:00 先のテスト\n#1 10/5(月) 09:00 後のテスト",
+  );
 });
