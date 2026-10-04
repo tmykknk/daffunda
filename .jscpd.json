@@ -1,0 +1,9 @@
+{
+  "path": ["src"],
+  "ignore": ["**/*.test.ts"],
+  "minTokens": 60,
+  "minLines": 6,
+  "threshold": 3,
+  "exitCode": 1,
+  "reporters": ["console"]
+}

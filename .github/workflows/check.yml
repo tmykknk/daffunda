@@ -1,0 +1,34 @@
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        timezone: [UTC, Asia/Tokyo]
+    env:
+      TZ: ${{ matrix.timezone }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Scan all Git history with checksum-verified gitleaks
+        run: sh scripts/check-secrets.sh

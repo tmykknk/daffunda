@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/index.ts", "scripts/checks.mjs"],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.mjs",
+    "test/**/*.ts",
+    "*.config.cts",
+    ".dependency-cruiser.cjs"
+  ]
+}

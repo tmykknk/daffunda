@@ -4,3 +4,8 @@ allowBuilds:
   workerd: true
 patchedDependencies:
   miniflare@4.20260730.0: patches/miniflare@4.20260730.0.patch
+packageExtensions:
+  miniflare@4.20260730.0:
+    dependencies:
+      '@puppeteer/browsers': 3.2.3
+      '@types/ws': 8.18.2
