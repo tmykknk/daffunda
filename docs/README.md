@@ -43,6 +43,9 @@ LINEのTODO＆リマインダーBotです。
 
 Codex が作るもの: `package.json`、`src/`、`test/fixtures/`、`scripts/`、各種設定、CI、利用者向け `README.md`、`LICENSE`、`docs/manual-test.md`
 
+# Summary
+- クラウドの環境設定でコケた（Install scriptが自動生成されたものだったのに気付かなかった -> miseのパスが通ってなかったりで少し詰まった）
+
 ## 1. 事前準備（人間）
 
 ### 1-1. リポジトリ
@@ -56,15 +59,20 @@ Codex が作るもの: `package.json`、`src/`、`test/fixtures/`、`scripts/`�
 | 項目 | 値 |
 |---|---|
 | リポジトリ | 対象の private リポジトリ |
-| パッケージバージョン設定（Node など） | **使わない**（mise に一本化） |
-| Agent internet access | On |
-| Domain allowlist | Common dependencies ＋ `developers.line.biz` |
-| Allowed HTTP methods | GET, HEAD, OPTIONS |
-| 環境変数・シークレット | **何も入れない**（公開予定のため、エージェントに渡す秘密はゼロ） |
+| Install script | 3-3 のスクリプト（編集画面の Scripts 欄で確認） |
+| Start skill | 設定しない（今は不要） |
+| Allow Codex to access internet | On |
+| Allow domains | Package managers |
+| Additional allowed domains | `developers.line.biz`（mise の導入などで他のホストの許可が必要になった場合は、エラーを見て追加） |
+| Environment variables / Network secrets | **何も入れない**（公開予定のため、エージェントに渡す秘密はゼロ） |
+| Privacy（Who can use） | Only me |
+| 公開 | Save draft のあと **Publish**。未公開（Unpublished）の環境ではタスクを開始できない |
+
+設定画面: Settings → Codex Cloud → Environments（または、新規タスクの Work in → Cloud → 環境セレクタ → Manage environments）
 
 > GitHub 連携だけではエージェント実行中にインターネットへ出られない。セットアップスクリプトは常にインターネット接続あり、エージェント実行中は既定で遮断で、環境ごとに許可を設定する。
 
-### 1-3. セットアップスクリプト
+### 1-3. Install script
 
 ```sh
 #!/usr/bin/env bash
@@ -88,19 +96,6 @@ if [ -f pnpm-lock.yaml ]; then
   pnpm install --frozen-lockfile
 fi
 ```
-
-### 1-4. メンテナンススクリプト（M0a のマージ後に設定）
-キャッシュ済みコンテナが古いコミットで作られた場合に依存関係を更新する。
-
-```sh
-#!/usr/bin/env bash
-set -euo pipefail
-export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
-if [ -f mise.toml ]; then export MISE_YES=1; mise trust; mise install; fi
-if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; fi
-```
-
-> スクリプトの事前確認には、公開されている参考イメージ（`ghcr.io/openai/codex-universal`）をローカルで動かす方法がある。本番と完全に同一ではない。
 
 ## 2. 実行手順
 
@@ -189,7 +184,7 @@ LINE の設定、デプロイ、groupId の取得、実機確認は `docs/line-s
 
 | タスク | 所要時間 | check の失敗回数と種類 | 人間の介入 | 設定を緩めようとしたか | pending 数 | 詰まった箇所 |
 |---|---|---|---|---|---|---|
-
+| M0a | 20m 39s | 4回 / 型の問題 | 0 | 0 | 0 | 0 |
 
 ループ記録（失敗回数・種類・直し方）は Codex が PR 本文に書く。人間が表に転記する。
 
