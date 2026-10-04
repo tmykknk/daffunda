@@ -41,4 +41,21 @@
   pnpm dev はローカル専用で、テレメトリーと任意の Request.cf メタデータ取得を無効化して外部接続を不要にする。
   実際の Request.cf はローカルの既定値になるため、そのメタデータに依存する実装を追加する際は別途検証する。
 
+- D-25 M0b のガードは共通の Node スクリプトを POSIX sh から呼び出す。SQL は TypeScript の構文木を使い、
+  コメント・文字列の誤検出を避けつつ、複数行・括弧付きの連結やテンプレートも拒否する。
+  ID 検査は docs を含む全体、抑制検査は tooling.md の対象に適用する。エラーには検出箇所のみを出し、内容は出さない。
+  設定生成は英数字・ハイフン・アンダースコアだけの D1_DATABASE_ID を受け入れ、元の wrangler.toml を変更しない。
+- D-26 M0b の knip が D-23 のルート開発依存2件を未使用と検出したため、Miniflare の packageExtensions に移す。
+  配布型が必要とする依存を実際の所有パッケージに宣言し、knip の除外や型検査の緩和は追加しない。
+  patchedDependencies・strictDepBuilds・allowBuilds は維持し、新しいビルド許可は追加しない。
+- D-27 Vitest は Workers 本体のテストと Node 上の検査ツールのテストを別プロジェクトで実行する。
+  本体は test/tooling 以外の test/**/*.test.ts、ツールは test/tooling/**/*.test.ts を対象とする。
+  src 全体を Istanbul で測定し、全体85%・domain95%・service90%を文・分岐・関数・行すべてに適用する。
+  定数の仕様整合性と例外時の安全なログをテストし、測定対象の除外は増やさない。
+  未実行の domain 関数を一時的に追加する検証でも、全体と domain の閾値違反で失敗することを確認した（検証用ファイルは削除）。
+- D-28 CI は mise.toml だけからツールを導入し、UTC と Asia/Tokyo で pnpm check を実行する。
+  別ジョブで全履歴を gitleaks 8.30.1 の CLI で検査する。公式配布アーカイブのチェックサムを検証し、出力は redact する。
+  外部 Action はコミット SHA 固定、権限は contents: read のみとし、デプロイやシークレット登録は行わない。
+  依存規則の拒否テストで pnpm の Hono 実体パスを見落とす問題を検出し、node_modules の深い配置にも規則を適用した。
+
 ## 要確認（実装中に追記）
