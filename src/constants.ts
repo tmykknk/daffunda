@@ -15,3 +15,31 @@ export const RESERVED_WORDS: readonly string[] = [
   COMMANDS.help,
   COMMANDS.remindList,
 ];
+export const MINUTES_PER_HOUR = 60;
+export const MILLISECONDS_PER_MINUTE = 60_000;
+export const MILLISECONDS_PER_DAY = 86_400_000;
+export const TOKYO_OFFSET_MINUTES = 9 * MINUTES_PER_HOUR;
+export const DAYS_PER_WEEK = 7;
+export const DEFAULT_REMINDER_HOUR = 9;
+export const AMBIGUOUS_PM_HOUR_LIMIT = 5;
+export const HOURS_PER_HALF_DAY = 12;
+export const MAX_REMINDER_YEARS = 1;
+export const DAY_PERIOD_HOURS: Readonly<Record<string, number>> = {
+  朝: 8,
+  昼: 12,
+  夕方: 17,
+  夜: 20,
+  今夜: 20,
+};
+export const RELATIVE_DAY_OFFSETS: Readonly<Record<string, number>> = {
+  昨日: -1,
+  今日: 0,
+  明日: 1,
+  明後日: 2,
+};
+export const WEEK_OFFSETS: Readonly<Record<string, number>> = {
+  今週: 0,
+  来週: 1,
+  再来週: 2,
+};
+export const WEEKDAY_NAMES = "日月火水木金土";

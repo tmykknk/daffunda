@@ -1,0 +1,290 @@
+[
+  {
+    "id": "R-01",
+    "input": "/歯医者 明日15時",
+    "expect": {
+      "ok": true,
+      "content": "歯医者",
+      "remindAt": "2026-10-04T15:00"
+    }
+  },
+  {
+    "id": "R-02",
+    "input": "/明日15時 歯医者",
+    "expect": {
+      "ok": true,
+      "content": "歯医者",
+      "remindAt": "2026-10-04T15:00"
+    }
+  },
+  {
+    "id": "R-03",
+    "input": "／歯医者　明日１５時",
+    "expect": {
+      "ok": true,
+      "content": "歯医者",
+      "remindAt": "2026-10-04T15:00"
+    }
+  },
+  {
+    "id": "R-04",
+    "input": "/歯医者 明日",
+    "expect": {
+      "ok": true,
+      "content": "歯医者",
+      "remindAt": "2026-10-04T09:00"
+    }
+  },
+  {
+    "id": "R-05",
+    "input": "/歯医者 明日の朝",
+    "expect": {
+      "ok": true,
+      "content": "歯医者",
+      "remindAt": "2026-10-04T08:00"
+    }
+  },
+  {
+    "id": "R-06",
+    "input": "/薬 今夜",
+    "expect": {
+      "ok": true,
+      "content": "薬",
+      "remindAt": "2026-10-03T20:00"
+    }
+  },
+  {
+    "id": "R-07",
+    "input": "/会議 18時",
+    "expect": {
+      "ok": true,
+      "content": "会議",
+      "remindAt": "2026-10-03T18:00"
+    }
+  },
+  {
+    "id": "R-08",
+    "input": "/洗濯 9時",
+    "expect": {
+      "ok": true,
+      "content": "洗濯",
+      "remindAt": "2026-10-04T09:00"
+    }
+  },
+  {
+    "id": "R-09",
+    "input": "/薬 今日の9時",
+    "expect": {
+      "ok": false,
+      "code": "PAST"
+    }
+  },
+  {
+    "id": "R-10",
+    "input": "/電話 午後3時",
+    "expect": {
+      "ok": true,
+      "content": "電話",
+      "remindAt": "2026-10-03T15:00"
+    }
+  },
+  {
+    "id": "R-11",
+    "input": "/電話 3時",
+    "expect": {
+      "ok": true,
+      "content": "電話",
+      "remindAt": "2026-10-03T15:00"
+    }
+  },
+  {
+    "id": "R-12",
+    "input": "/電話 15:30",
+    "expect": {
+      "ok": true,
+      "content": "電話",
+      "remindAt": "2026-10-03T15:30"
+    }
+  },
+  {
+    "id": "R-13",
+    "input": "/ゴミ 30分後",
+    "expect": {
+      "ok": true,
+      "content": "ゴミ",
+      "remindAt": "2026-10-03T12:30"
+    }
+  },
+  {
+    "id": "R-14",
+    "input": "/ゴミ 2時間後",
+    "expect": {
+      "ok": true,
+      "content": "ゴミ",
+      "remindAt": "2026-10-03T14:00"
+    }
+  },
+  {
+    "id": "R-15",
+    "input": "/宿題 3日後",
+    "expect": {
+      "ok": true,
+      "content": "宿題",
+      "remindAt": "2026-10-06T09:00"
+    }
+  },
+  {
+    "id": "R-16",
+    "input": "/会議 月曜",
+    "expect": {
+      "ok": true,
+      "content": "会議",
+      "remindAt": "2026-10-05T09:00"
+    }
+  },
+  {
+    "id": "R-17",
+    "input": "/会議 来週月曜10時",
+    "expect": {
+      "ok": true,
+      "content": "会議",
+      "remindAt": "2026-10-05T10:00"
+    }
+  },
+  {
+    "id": "R-18",
+    "input": "/会議 来週金曜",
+    "expect": {
+      "ok": true,
+      "content": "会議",
+      "remindAt": "2026-10-09T09:00"
+    }
+  },
+  {
+    "id": "R-19",
+    "input": "/会議 再来週月曜",
+    "expect": {
+      "ok": true,
+      "content": "会議",
+      "remindAt": "2026-10-12T09:00"
+    }
+  },
+  {
+    "id": "R-20",
+    "input": "/会議 今週金曜",
+    "expect": {
+      "ok": false,
+      "code": "PAST"
+    }
+  },
+  {
+    "id": "R-21",
+    "input": "/誕生日 10/5",
+    "expect": {
+      "ok": true,
+      "content": "誕生日",
+      "remindAt": "2026-10-05T09:00"
+    }
+  },
+  {
+    "id": "R-22",
+    "input": "/申告 10/1",
+    "expect": {
+      "ok": true,
+      "content": "申告",
+      "remindAt": "2027-10-01T09:00"
+    }
+  },
+  {
+    "id": "R-23",
+    "input": "/家賃 月末",
+    "expect": {
+      "ok": true,
+      "content": "家賃",
+      "remindAt": "2026-10-31T09:00"
+    }
+  },
+  {
+    "id": "R-24",
+    "input": "/旅行 来月",
+    "expect": {
+      "ok": false,
+      "code": "UNPARSEABLE"
+    }
+  },
+  {
+    "id": "R-25",
+    "input": "/歯医者",
+    "expect": {
+      "ok": false,
+      "code": "NO_DATETIME"
+    }
+  },
+  {
+    "id": "R-26",
+    "input": "/明日15時",
+    "expect": {
+      "ok": false,
+      "code": "NO_CONTENT"
+    }
+  },
+  {
+    "id": "R-27",
+    "input": "/歯医者 明日15時 明後日",
+    "expect": {
+      "ok": false,
+      "code": "MULTIPLE"
+    }
+  },
+  {
+    "id": "R-28",
+    "input": "/歯医者 昨日",
+    "expect": {
+      "ok": false,
+      "code": "PAST"
+    }
+  },
+  {
+    "id": "R-29",
+    "input": "/歯医者 2027/11/1",
+    "expect": {
+      "ok": false,
+      "code": "TOO_FAR"
+    }
+  },
+  {
+    "id": "R-30",
+    "input": "/薬 今日",
+    "expect": {
+      "ok": false,
+      "code": "PAST"
+    }
+  },
+  {
+    "id": "R-31",
+    "input": "/薬 夕方",
+    "expect": {
+      "ok": true,
+      "content": "薬",
+      "remindAt": "2026-10-03T17:00"
+    }
+  },
+  {
+    "id": "R-32",
+    "input": "/会議 明日午前10時",
+    "expect": {
+      "ok": true,
+      "content": "会議",
+      "remindAt": "2026-10-04T10:00"
+    }
+  },
+  {
+    "id": "R-33",
+    "input": "/薬 朝",
+    "expect": {
+      "ok": true,
+      "content": "薬",
+      "remindAt": "2026-10-04T08:00"
+    }
+  }
+]
