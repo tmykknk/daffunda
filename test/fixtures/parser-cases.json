@@ -1,0 +1,263 @@
+[
+  {
+    "id": "P-01",
+    "input": "+牛乳",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳"]
+    }
+  },
+  {
+    "id": "P-02",
+    "input": "+牛乳 パン　卵",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳", "パン", "卵"]
+    }
+  },
+  {
+    "id": "P-03",
+    "input": "＋牛乳",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳"]
+    }
+  },
+  {
+    "id": "P-04",
+    "input": "+ 牛乳",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳"]
+    }
+  },
+  {
+    "id": "P-05",
+    "input": "+ｱｲｽ",
+    "expect": {
+      "type": "add",
+      "items": ["アイス"]
+    }
+  },
+  {
+    "id": "P-06",
+    "input": "+牛乳 牛乳",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳"]
+    }
+  },
+  {
+    "id": "P-07",
+    "input": "+",
+    "expect": {
+      "type": "usage",
+      "command": "add"
+    }
+  },
+  {
+    "id": "P-08",
+    "input": "-",
+    "expect": {
+      "type": "usage",
+      "command": "remove"
+    }
+  },
+  {
+    "id": "P-09",
+    "input": "/",
+    "expect": {
+      "type": "usage",
+      "command": "reminder"
+    }
+  },
+  {
+    "id": "P-10",
+    "input": "-牛乳 卵",
+    "expect": {
+      "type": "remove",
+      "items": ["牛乳", "卵"]
+    }
+  },
+  {
+    "id": "P-11",
+    "input": "－牛乳",
+    "expect": {
+      "type": "remove",
+      "items": ["牛乳"]
+    }
+  },
+  {
+    "id": "P-12",
+    "input": "-みるく",
+    "expect": {
+      "type": "remove",
+      "items": ["みるく"]
+    }
+  },
+  {
+    "id": "P-13",
+    "input": "牛乳",
+    "expect": {
+      "type": "ignore"
+    }
+  },
+  {
+    "id": "P-14",
+    "input": "牛乳 済",
+    "expect": {
+      "type": "ignore"
+    }
+  },
+  {
+    "id": "P-15",
+    "input": "",
+    "expect": {
+      "type": "ignore"
+    }
+  },
+  {
+    "id": "P-16",
+    "input": "リスト",
+    "expect": {
+      "type": "list"
+    }
+  },
+  {
+    "id": "P-17",
+    "input": "りすと",
+    "expect": {
+      "type": "list"
+    }
+  },
+  {
+    "id": "P-18",
+    "input": "リスト追加",
+    "expect": {
+      "type": "ignore"
+    }
+  },
+  {
+    "id": "P-19",
+    "input": "リストを見せて",
+    "expect": {
+      "type": "ignore"
+    }
+  },
+  {
+    "id": "P-20",
+    "input": "+リスト",
+    "expect": {
+      "type": "reserved_word",
+      "words": ["リスト"]
+    }
+  },
+  {
+    "id": "P-21",
+    "input": "+ヘルプ",
+    "expect": {
+      "type": "reserved_word",
+      "words": ["ヘルプ"]
+    }
+  },
+  {
+    "id": "P-22",
+    "input": "ヘルプ",
+    "expect": {
+      "type": "help"
+    }
+  },
+  {
+    "id": "P-23",
+    "input": "リマインド",
+    "expect": {
+      "type": "remind_list"
+    }
+  },
+  {
+    "id": "P-24",
+    "input": "リマインド削除 3",
+    "expect": {
+      "type": "remind_delete",
+      "id": 3
+    }
+  },
+  {
+    "id": "P-25",
+    "input": "リマインド削除",
+    "expect": {
+      "type": "usage",
+      "command": "remind_delete"
+    }
+  },
+  {
+    "id": "P-26",
+    "input": "リマインド削除 abc",
+    "expect": {
+      "type": "usage",
+      "command": "remind_delete"
+    }
+  },
+  {
+    "id": "P-27",
+    "input": "/歯医者 明日15時",
+    "expect": {
+      "type": "reminder",
+      "raw": "歯医者 明日15時"
+    }
+  },
+  {
+    "id": "P-28",
+    "input": "／歯医者　明日１５時",
+    "expect": {
+      "type": "reminder",
+      "raw": "歯医者 明日15時"
+    }
+  },
+  {
+    "id": "P-29",
+    "input": "+i01 i02 i03 i04 i05 i06 i07 i08 i09 i10 i11 i12 i13 i14 i15 i16 i17 i18 i19 i20 i21",
+    "expect": {
+      "type": "limit_error"
+    }
+  },
+  {
+    "id": "P-30",
+    "input": "+あああああああああああああああああああああああああああああああああああああああああああああああああああ",
+    "expect": {
+      "type": "limit_error"
+    }
+  },
+  {
+    "id": "P-31",
+    "input": "  +牛乳  ",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳"]
+    }
+  },
+  {
+    "id": "P-32",
+    "input": "+牛乳、パン",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳、パン"]
+    }
+  },
+  {
+    "id": "P-33",
+    "input": "-牛乳\n卵",
+    "expect": {
+      "type": "remove",
+      "items": ["牛乳", "卵"]
+    }
+  },
+  {
+    "id": "P-34",
+    "input": "+牛乳\nパン",
+    "expect": {
+      "type": "add",
+      "items": ["牛乳", "パン"]
+    }
+  }
+]
