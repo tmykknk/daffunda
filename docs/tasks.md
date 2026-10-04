@@ -22,7 +22,7 @@
       ※ .github/workflows をエージェントが push できない場合は、ファイルを PR 本文に貼って人間に渡す（それも実験結果として記録）
 - [x] M1 domain/normalize + domain/parser。parser-cases.md 全行を fixtures 化、整合性テスト、実装
 - [x] M2 domain/reminder-parse。reminder-cases.md 全行を fixtures 化、整合性テスト、実装（TZ 2種で通す）
-- [ ] M3 repo + migrations（items, reminders, processed_events）。claim、滞留復旧
+- [x] M3 repo + migrations（items, reminders, processed_events）。claim、滞留復旧
 - [ ] M4 service（返信文、登録済み/見つからない/予約語/上限、リマインダー登録・一覧・削除、長いリストの分割または省略）
 - [ ] M5 line/verify + Webhook 統合テスト（POST /webhook、署名不正→401、非許可group・未設定→200で無変更、events が空配列→200、
       再送で二重登録なし、拒否時ログに type と ID のみ。LINEクライアントはモック）

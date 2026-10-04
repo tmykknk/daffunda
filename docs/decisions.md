@@ -89,4 +89,21 @@
   R-01〜R-33は全33行をfixtures化し、MarkdownのID・順序・入力・期待値との完全一致を検証する。
   規定のJST表記の期待値は変更せず、UTC結果をテストでJSTの分精度へ変換して比較する。Workersでのchrono実行もテストする。
 
+- D-34 M3 は D1 行の境界検証に仕様指定の valibot 1.5.0 を実行時依存として追加する。
+  D1 テストには既存 Workers プールの readD1Migrations と applyD1Migrations を使い、実際の migrations/ を自動適用する。
+  必要な依存・Vitest の設定追加をここに記録し、PR 本文にも明示する。mise・閾値・lint・ビルド許可は変更しない。
+
+  Workers の仮想モジュールには実行時に提供されるAPIの狭い型宣言を置き、Node側テストのグローバル型との衝突を避ける。
+  knip 6.39.0 は cloudflare:test / cloudflare:workers のコロン以降を落として解決するため、
+  paths の cloudflare をその型宣言に対応させる。ignoreDependencies・検査除外は追加しない。
+- D-35 created_at の既定値も UTC ISO8601 に統一し、spec のDB定義を実際のマイグレーションに合わせる。
+  品目の照合インデックスは非uniqueとし、既存同名行を古い作成日時・ID順で1件だけ削除できるようにする。
+  DBに空のグループ・名前・内容・イベントID、未知の状態、0〜3外の試行回数を保存しない制約を置く。
+- D-36 updated_at だけでは同じミリ秒の再claimを区別できないため、claim_tokenを追加する。
+  原子的UPDATEでclaimごとのUUIDを保存し、成功・失敗はID・グループ・sending・claim_token一致の場合だけ更新する。
+  取消・滞留復旧・成功・失敗時に識別子をクリアし、旧claimの遅れた更新を拒否する。
+  このUUIDは内部の処理識別用であり、LINE Pushのretry_keyとは共有しない。retry_keyの採否はM6で公式確認する。
+  未送信一覧・取消はpending/sending/failedを対象とし、sent/canceledを除外する。5分ちょうどのsendingは復旧せず、5分超のみ戻す。
+  processed_eventsは原子的な記録・取得だけを実装し、Webhookとの統合はM5、Push/Cronとの統合はM6で行う。
+
 ## 要確認（実装中に追記）

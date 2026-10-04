@@ -7,5 +7,8 @@
     "test/**/*.ts",
     "*.config.cts",
     ".dependency-cruiser.cjs"
-  ]
+  ],
+  "paths": {
+    "cloudflare": ["./test/d1-bindings.d.ts"]
+  }
 }
