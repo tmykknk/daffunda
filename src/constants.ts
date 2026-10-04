@@ -43,3 +43,6 @@ export const WEEK_OFFSETS: Readonly<Record<string, number>> = {
   再来週: 2,
 };
 export const WEEKDAY_NAMES = "日月火水木金土";
+
+export const MAX_REMINDER_ATTEMPTS = 3;
+export const REMINDER_STALE_AFTER_MS = 5 * MILLISECONDS_PER_MINUTE;

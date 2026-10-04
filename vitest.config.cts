@@ -2,7 +2,10 @@ async function createTestConfig() {
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/logs";
   process.env.WRANGLER_SEND_METRICS ??= "false";
 
-  const { cloudflareTest } = await import("@cloudflare/vitest-pool-workers");
+  const { cloudflareTest, readD1Migrations } = await import(
+    "@cloudflare/vitest-pool-workers"
+  );
+  const migrations = await readD1Migrations("./migrations");
   const { defineConfig } = await import("vitest/config");
 
   return defineConfig({
@@ -10,7 +13,10 @@ async function createTestConfig() {
       projects: [
         {
           plugins: [
-            cloudflareTest({ wrangler: { configPath: "./wrangler.toml" } }),
+            cloudflareTest({
+              wrangler: { configPath: "./wrangler.toml" },
+              miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+            }),
           ],
           test: {
             name: "workers",

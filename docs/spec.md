@@ -59,15 +59,16 @@ Webhook: `POST /webhook`（他のパスは 404）
 ## DB（D1 / SQLite）
 items(
   id INTEGER PRIMARY KEY, group_id TEXT NOT NULL, name TEXT NOT NULL, norm_name TEXT NOT NULL,
-  added_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), done_at TEXT)
+  added_by TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), done_at TEXT)
   INDEX (group_id, done_at, norm_name)
 reminders(
   id INTEGER PRIMARY KEY, group_id TEXT NOT NULL, content TEXT NOT NULL, remind_at TEXT NOT NULL,
-  created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_by TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   status TEXT NOT NULL DEFAULT 'pending',  -- pending/sending/sent/failed/canceled
-  attempts INTEGER NOT NULL DEFAULT 0, retry_key TEXT, sent_at TEXT, updated_at TEXT)
+  attempts INTEGER NOT NULL DEFAULT 0, retry_key TEXT, sent_at TEXT, updated_at TEXT, claim_token TEXT)
   INDEX (status, remind_at)
-processed_events(event_id TEXT PRIMARY KEY, created_at TEXT NOT NULL DEFAULT (datetime('now')))
+processed_events(event_id TEXT PRIMARY KEY NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))
+- claim_token は各claimの識別子。成功・失敗の更新は現在のclaimとの一致を条件にし、復旧・取消・完了時にクリアする。retry_keyとは別用途
 - 複数品目の登録・削除は db.batch() で原子的に
 - マイグレーションは migrations/ で管理し、テスト起動時に自動適用
 
