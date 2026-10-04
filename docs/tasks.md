@@ -1,6 +1,15 @@
 # タスク（すべてクラウドの Codex で実行）
 
-- [x] S0 疎通スモーク（コミットなし）: ①公式 index.html.md の取得可否 ②npm registry への接続 ③mise・Node・pnpm の状態と PATH ④結果の報告のみ
+- [x] S0 疎通スモーク（ファイル変更・コミットなし。チェックも付けない）。次を実行し、出力をそのまま報告する:
+      1. cat mise.toml
+      2. mise --version、type -a mise node pnpm
+      3. echo "$PATH" | tr ':' '\n'
+      4. mise exec -- node -v、mise exec -- pnpm -v、mise exec -- which node
+      5. bash -c 'which node pnpm mise' と bash -lc 'which node pnpm mise'
+      6. tail -5 ~/.bashrc ~/.profile
+      7. curl -s -D - -o /dev/null https://developers.line.biz/ja/reference/messaging-api/index.html.md のレスポンスヘッダー全文
+      8. curl -s -o /dev/null -w "%{http_code}\n" https://registry.npmjs.org/hono
+      9. 失敗した場合はエラー全文
 - [x] M0a 足場（最小）: package.json(pnpm, packageManager なし), tsconfig(厳格フラグ), biome.json, vitest(workers pool),
       wrangler.toml(D1 はプレースホルダー, cron "* * * * *"), migrations/(空), .gitignore,
       src/ の土台(constants/messages/logger/index)、スモークテスト1本、pnpm-lock.yaml。

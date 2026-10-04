@@ -116,47 +116,27 @@ fi
 
 各タスクの中身と完了条件は `docs/tasks.md` が正。1つの PR をマージしてから次のタスクを投げる。
 
-## 3. Codex に貼るプロンプト
+## 3. Codex に送る指示
 
-### 3-1. S0（最初に1回）
+指示は**タスク名だけ**でよい。読むファイル、進め方、PR 本文の形式は `AGENTS.md` の「タスクの受け方」に書いてある。
 
-```text
-コードは書かず、何もコミットしないでください。次を実行して結果だけ報告してください。
-1. curl -sI https://developers.line.biz/ja/reference/messaging-api/index.html.md の HTTPステータス
-   と、同URLの先頭20行の取得可否
-2. curl -sI https://registry.npmjs.org/hono の HTTPステータス
-3. mise --version、mise current、which node、which pnpm、node -v、pnpm -v
-   （mise.toml の値と一致するか。エージェントのシェルの PATH に mise の shim が入っているか）
-4. 失敗した場合はエラー全文
-```
-
-### 3-2. 共通テンプレート（【　】を差し替え）
-
-```text
-このリポジトリの AGENTS.md、docs/spec.md、docs/parser-cases.md、docs/reminder-cases.md、
-docs/conventions.md、docs/tooling.md、docs/review-checklist.md、docs/tasks.md、docs/decisions.md を
-最初に全部読んでください。
-今回の担当は docs/tasks.md の【M0a】です。
-- LINE API に関わる実装は、AGENTS.md の「LINE API の参照」に従い、実装前に公式の Markdown 版を確認してください
-- 各マイルストーンはテストを先に書き、pnpm check を通してからコミットしてください
-- 期待値やリント設定・しきい値を緩めて通すことは禁止です。抑制コメントも使わないでください。コードを直して通してください
-- 完了した項目は docs/tasks.md にチェックを付けてください
-- AGENTS.md の禁止事項（実在ID・トークン・個人情報の記載禁止を含む）は絶対に守ってください
-- PR を出す前に docs/review-checklist.md の「PR 提出前」をすべて確認し、結果を PR 本文に書いてください
-- 最後に PR を作り、完了項目・判断した点・pending にした行・要確認・未解決点・ループ記録を要約してください
-```
-
-### 3-3. 【担当】の差し替え順
-
-| 回 | 【担当】 | 人間が特に見る点 |
+| 送る文字列 | 内容 | 人間が特に見る点 |
 |---|---|---|
-| 1 | M0a | `pnpm check` がクラウドで動く（H2）、`allowBuilds` の差分、`mise.toml` が無変更 |
-| 2 | M0b | Actions が動く（H3・H4）、`check-toolchain` が緑（H11）、`check-suppressions` が入っている |
-| 3 | M1〜M2 | fixtures 件数（P-34、R-33）、補完ルールの違和感、整合性テスト |
-| 4 | M3〜M5 | 署名検証を公式の該当節と**自分の目で**見比べる（最重要） |
-| 5 | M6 | Push の再試行キーの採否と理由、429 のログ |
-| 6 | M7a〜M7b | 整理周回で挙動が変わっていないか、README が他人に再現できるか、pending が 0 件 |
-| 7（任意） | R | 逸脱の指摘が妥当か |
+| `S0` | 疎通確認（読み取りのみ） | H1・H10 |
+| `M0a` | 足場（最小） | `pnpm check` がクラウドで動く（H2）、`allowBuilds` の差分、`mise.toml` が無変更 |
+| `M0b` | 検査の追加 | Actions が動く（H3・H4）、`check-toolchain` が緑（H11）、`check-suppressions` が入っている、カバレッジの閾値をどう通したか |
+| `M1〜M2` | パーサーとリマインダー解釈 | fixtures 件数（P-34、R-33）、補完ルールの違和感、整合性テスト |
+| `M3〜M5` | repo・service・署名検証・Webhook | 署名検証を公式の該当節と**自分の目で**見比べる（最重要） |
+| `M6` | Cron 送信 | Push の再試行キーの採否と理由、429 のログ |
+| `M7a〜M7b` | 整理周回・README・仕上げ | 挙動が変わっていないか、README が他人に再現できるか、pending が 0 件 |
+| `R`（任意） | 自己レビュー周回 | 逸脱の指摘が妥当か |
+| `REVIEW <PR番号>` | PR のチェックリスト確認（読み取りのみ） | 自己点検なので独立した検証ではない。重要項目は人間が見る |
+| `次` | 未チェックの先頭の必須項目を1つ | 実行前に何が対象か確認する |
+
+補足:
+- 1回の指示で複数のマイルストーンを投げられる（`M1〜M2` など）。分割するときは1つずつ
+- 前提のタスクが未完了のときは、Codex が着手せずに報告して止まる
+- 追加の注意（例:「公式の〇〇節を特に確認して」）は、タスク名のあとに続けて書いてよい
 
 ## 4. 公開（人間）
 

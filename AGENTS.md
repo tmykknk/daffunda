@@ -5,6 +5,27 @@ LINE買い物リスト＆リマインダーBot。正の優先順位:
 1. LINE Messaging API の仕様 → 公式リファレンス（下記）
 2. ふるまい → docs/spec.md、docs/parser-cases.md、docs/reminder-cases.md
 3. 規約・ツール設定 → docs/conventions.md、docs/tooling.md
+4. レビュー基準 → docs/review-checklist.md、タスク → docs/tasks.md、判断の記録 → docs/decisions.md
+
+## タスクの受け方
+指示が docs/tasks.md のタスク名だけ（例: `S0`、`M0b`、`M1〜M2`、`R`）のとき、次のとおり進める。
+タスク名のほかに指示があれば、それも守る。タスク名以外の通常の依頼には、この節を適用しない。
+
+1. 最初に次を全部読む（AGENTS.md は読み込み済み）:
+   docs/spec.md、docs/parser-cases.md、docs/reminder-cases.md、docs/conventions.md、
+   docs/tooling.md、docs/review-checklist.md、docs/tasks.md、docs/decisions.md
+2. 担当は指示されたタスク名の項目だけ。他の項目に手を付けない
+3. タスク名が docs/tasks.md に無い場合、または担当より上に未チェックの必須項目がある場合（S0・R・M8 は除く）は、
+   着手せず、理由を報告して止まる
+4. 実装系のタスク（S0 以外）:
+   - テストを先に書き、pnpm check を通してからコミットする
+   - 完了した項目に tasks.md でチェックを付ける
+   - PR を出す前に docs/review-checklist.md の「PR 提出前」をすべて確認する
+   - 最後に PR を作り、本文に次を書く: 完了項目、判断した点、pending にした行、要確認、未解決点、ループ記録、レビューチェックの結果
+5. `S0`: docs/tasks.md の S0 の手順どおりに確認して結果だけ報告する。ファイルを変更せず、コミットしない
+6. `REVIEW <PR番号またはブランチ名>`: 指定されたブランチについて、docs/review-checklist.md の「PR 提出前」を実際のコマンドで確認し、
+   項目ごとに OK / NG と根拠（実行したコマンドと出力の要約）を報告する。ファイルを変更せず、コミットしない
+7. `次`: tasks.md の未チェックの必須項目のうち、先頭の1項目を担当する（S0・R・M8 は除く）
 
 ## LINE API の参照（必須）
 - 公式（Markdown版）を直接読む: https://developers.line.biz/ja/reference/messaging-api/index.html.md
@@ -58,7 +79,7 @@ src/constants.ts, src/messages.ts, src/logger.ts
   Cloudflare の account_id/database_id、実名、住所、実在の家庭の品目など）を
   コード・テスト・ドキュメント・コミットメッセージに書かない。
   テストのIDは `U_test_user_1` `C_test_group_1` のようなダミーを使う
-- .dev.vars, .env*, wrangler.generated.toml をコミットしない
+- .dev.vars, .env*, wrangler.generated.toml, mise.local.toml をコミットしない
 - SQL文字列の連結・テンプレートリテラル禁止。必ず .bind() を使う
 - ログにメッセージ本文を出さない
 - docs/spec.md と食い違う実装をしない。曖昧なら最も安全な解釈で進め、docs/decisions.md に理由を残す
@@ -73,4 +94,4 @@ src/constants.ts, src/messages.ts, src/logger.ts
 4. 規則の追加が必要になったら、この AGENTS.md に追記する
 5. PR本文に「ループ記録」を書く: pnpm check が失敗した回数、失敗の種類（型/リント/重複/構造/テスト/ガード）、
    それぞれどう直したか、設定を緩めたくなった箇所とその代わりに取った対処
-6. PR を出す前に docs/review-checklist.md の「PR 提出前」をすべて確認し、結果を PR 本文に書く
+6. 実装系のタスクでは、PR を出す前に docs/review-checklist.md の「PR 提出前」を確認する（「タスクの受け方」参照）
