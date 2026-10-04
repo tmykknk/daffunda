@@ -1,0 +1,27 @@
+{
+  "name": "daffunda",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "XDG_CONFIG_HOME=\"$PWD/.wrangler/config\" XDG_CACHE_HOME=\"$PWD/.wrangler/cache\" WRANGLER_LOG_PATH=.wrangler/logs WRANGLER_SEND_METRICS=false CLOUDFLARE_CF_FETCH_ENABLED=false wrangler dev --local",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.tools.json",
+    "lint": "biome check .",
+    "test": "vitest run --coverage",
+    "check": "pnpm typecheck && pnpm lint && pnpm test"
+  },
+  "dependencies": {
+    "hono": "4.13.12"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@cloudflare/vitest-pool-workers": "0.19.1",
+    "@cloudflare/workers-types": "5.20260730.1",
+    "@puppeteer/browsers": "3.2.3",
+    "@types/node": "24.10.0",
+    "@types/ws": "8.18.2",
+    "@vitest/coverage-istanbul": "4.1.11",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.116.0"
+  }
+}

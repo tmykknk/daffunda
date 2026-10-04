@@ -1,7 +1,7 @@
 # タスク（すべてクラウドの Codex で実行）
 
 - [ ] S0 疎通スモーク（コミットなし）: ①公式 index.html.md の取得可否 ②npm registry への接続 ③mise・Node・pnpm の状態と PATH ④結果の報告のみ
-- [ ] M0a 足場（最小）: package.json(pnpm, packageManager なし), tsconfig(厳格フラグ), biome.json, vitest(workers pool),
+- [x] M0a 足場（最小）: package.json(pnpm, packageManager なし), tsconfig(厳格フラグ), biome.json, vitest(workers pool),
       wrangler.toml(D1 はプレースホルダー, cron "* * * * *"), migrations/(空), .gitignore,
       src/ の土台(constants/messages/logger/index)、スモークテスト1本、pnpm-lock.yaml。
       mise.toml は人間が配置済み（変更しない）。install 時にビルドスクリプトで失敗した依存は、
