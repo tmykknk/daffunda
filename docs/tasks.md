@@ -20,7 +20,7 @@
       Biome のテスト関連ルール（skip・only の検出）, カバレッジ閾値, GitHub Actions(mise-action + pnpm check、gitleaks 全履歴)。
       pnpm check を全体に拡張して全緑。
       ※ .github/workflows をエージェントが push できない場合は、ファイルを PR 本文に貼って人間に渡す（それも実験結果として記録）
-- [ ] M1 domain/normalize + domain/parser。parser-cases.md 全行を fixtures 化、整合性テスト、実装
+- [x] M1 domain/normalize + domain/parser。parser-cases.md 全行を fixtures 化、整合性テスト、実装
 - [ ] M2 domain/reminder-parse。reminder-cases.md 全行を fixtures 化、整合性テスト、実装（TZ 2種で通す）
 - [ ] M3 repo + migrations（items, reminders, processed_events）。claim、滞留復旧
 - [ ] M4 service（返信文、登録済み/見つからない/予約語/上限、リマインダー登録・一覧・削除、長いリストの分割または省略）
