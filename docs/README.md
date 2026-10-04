@@ -37,6 +37,7 @@ LINEのTODO＆リマインダーBotです。
    ├─ review-checklist.md     PR 提出前・人間レビューのチェック
    ├─ tasks.md                タスク一覧（Codex が上から消化）
    ├─ decisions.md            設計判断と「要確認」
+   ├─ line-setup.md           LINE の設定手順（人間向け。README からもリンク）
    └─ publish-checklist.md    公開前チェック（人間）
 ```
 
@@ -106,16 +107,17 @@ if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; fi
 | # | 誰が | 内容 |
 |---|---|---|
 | 1 | 人間 | 「1. 事前準備」を完了 |
-| 2 | Codex | **S0**（疎通スモーク）。コミットなし。H1・H10 を判定 |
-| 3 | Codex → 人間 | **M0a** → PR → レビュー → マージ → メンテナンススクリプトを設定 |
-| 4 | Codex → 人間 | **M0b** → PR → レビュー → マージ（Actions の動作を確認） |
-| 5 | Codex → 人間 | **M1〜M2** → PR → レビュー → マージ |
-| 6 | Codex → 人間 | **M3〜M5** → PR → レビュー（M5 の署名検証は公式と見比べる）→ マージ |
-| 7 | Codex → 人間 | **M6** → PR → レビュー（再試行キーの採否）→ マージ |
-| 8 | Codex → 人間 | **M7a〜M7b**（任意で **R**）→ PR → レビュー → マージ |
-| 9 | 人間 | 公開前チェック → public 化 → Branch protection（「6. 公開」） |
-| 10 | 人間 | LINE・Cloudflare の設定とデプロイ、実機確認（「7. デプロイと実機確認」） |
-| 11 | 人間 | 実験のまとめ（「6. 実験の記録」） |
+| 2 | 人間 | **並行して** LINE 側の準備（`docs/line-setup.md` の 2〜4 と 9）と `wrangler d1 create`。値は控えるだけ（リポジトリや環境変数に入れない） |
+| 3 | Codex | **S0**（疎通スモーク）。H1・H10 を判定（済み） |
+| 4 | Codex → 人間 | **M0a** → PR → レビュー → マージ → メンテナンススクリプトを設定 |
+| 5 | Codex → 人間 | **M0b** → PR → レビュー → マージ（Actions の動作を確認） |
+| 6 | Codex → 人間 | **M1〜M2** → PR → レビュー → マージ |
+| 7 | Codex → 人間 | **M3〜M5** → PR → レビュー（M5 の署名検証は公式と見比べる）→ マージ |
+| 8 | 人間 | **初回デプロイと実機確認**（`docs/line-setup.md` の 5〜6）。groupId の取得と設定、追加・削除・リスト・雑談無視・再送・ヘルプ。見つかった問題は次のタスクへ |
+| 9 | Codex → 人間 | **M6** → PR → レビュー（再試行キーの採否）→ マージ → リマインダーの実機確認と Push 無料枠の確認 |
+| 10 | Codex → 人間 | **M7a〜M7b**（任意で **R**）→ PR → レビュー → マージ → M7a 後に再デプロイして挙動を再確認 |
+| 11 | 人間 | 公開前チェック → public 化 → Branch protection（「6. 公開」） |
+| 12 | 人間 | 実験のまとめ（「6. 実験の記録」） |
 
 各タスクの中身と完了条件は `docs/tasks.md` が正。1つの PR をマージしてから次のタスクを投げる。
 
@@ -169,6 +171,8 @@ docs/conventions.md、docs/tooling.md、docs/review-checklist.md、docs/tasks.md
 
 ## 5. デプロイと実機確認（人間）
 
+LINE の設定、デプロイ、groupId の取得、実機確認は `docs/line-setup.md` に従う。
+時期は「4. 実行手順」の 2・8・9・10 を参照（M5 の後に初回、M6 の後にリマインダー、M7a の後に再確認）。
 自動デプロイ（CD）は今回作らない（`decisions.md` D-12）。
 
 1. LINE Developers でチャネルを作成し、チャネルシークレットとアクセストークンを取得
@@ -185,6 +189,7 @@ docs/conventions.md、docs/tooling.md、docs/review-checklist.md、docs/tasks.md
 
 | タスク | 所要時間 | check の失敗回数と種類 | 人間の介入 | 設定を緩めようとしたか | pending 数 | 詰まった箇所 |
 |---|---|---|---|---|---|---|
+
 
 ループ記録（失敗回数・種類・直し方）は Codex が PR 本文に書く。人間が表に転記する。
 

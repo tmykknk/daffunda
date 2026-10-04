@@ -4,6 +4,7 @@
 LINE Messaging API → Cloudflare Workers (Hono, TypeScript strict) → D1
 リマインダー送信: Workers Cron Trigger（毎分、crons = ["* * * * *"]）
 OSSとして公開する前提。環境固有の値は一切リポジトリに含めない。
+Webhook: `POST /webhook`（他のパスは 404）
 
 ## 共通ルール
 - 受信テキストは NFKC 正規化 → trim してから解釈（＋→+、－→-、／→/、全角スペース→半角、全角数字→半角）
@@ -12,6 +13,7 @@ OSSとして公開する前提。環境固有の値は一切リポジトリに�
 - 返信は Reply API（無料枠を消費しない）。Push API はリマインダー発火時のみ
 - 時刻は DB に UTC(ISO8601)、解釈と表示は Asia/Tokyo
 - 予約語（品目名にできない）: リスト、りすと、ヘルプ、リマインド
+- 1対1トークなど、groupId を持たないイベントは対象外（無視）。許可するのは ALLOWED_GROUP_ID と一致する groupId のみ
 
 ## コマンド
 | 入力 | 動作 |
@@ -46,7 +48,9 @@ OSSとして公開する前提。環境固有の値は一切リポジトリに�
 
 ## セキュリティ
 - 署名検証: 生の body 文字列で HMAC-SHA256 → Base64 → 定数時間比較（詳細は公式で確認）。不正は 401、DB変更なし
-- 非許可 groupId は 200 を返して何もしない（ログのみ。本文は残さない）
+- 非許可 groupId、および ALLOWED_GROUP_ID が未設定・仮値の間は、200 を返して何もしない（DB変更なし）。
+  拒否時は、初期設定で groupId を調べられるよう `source.type` と ID（groupId / roomId / userId）だけをログに出す。メッセージ本文は出さない
+- `events` が空配列のリクエスト（Webhook URL の検証など）も、署名が正しければ 200 を返す（公式で確認）
 - SQL はバインドのみ。D1 アクセスは repo/ のみ
 - Secrets: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, ALLOWED_GROUP_ID
   （公開リポジトリのため ALLOWED_GROUP_ID も vars ではなく Secret）

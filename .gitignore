@@ -5,3 +5,4 @@ coverage/
 .dev.vars.*
 .env*
 wrangler.generated.toml
+mise.local.toml

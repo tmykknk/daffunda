@@ -81,6 +81,9 @@ entry を src/index.ts に設定し、未使用のエクスポート・ファイ
 ## カバレッジ（vitest）
 - provider は istanbul（Workers プールの制約。動かなければ設定を調整して decisions.md に記録）
 - 下限: src/domain/** 95%、src/service/** 90%、全体 85%
+- coverage の対象から除外してよいのは、テストファイル自身、型定義のみのファイル、fixtures のみとする。ロジックを含むファイルは除外しない
+- 定数のみのファイル（constants.ts、messages.ts）は、他のコードから参照されて実行されるため、除外せずに測定対象のままにする（実際に使われていれば 0% にならない）
+- 閾値を下げることは禁止。足りない場合はテストを追加する
 
 ## GitHub Actions
 - ジョブ1 check: jdx/mise-action で mise.toml からツール導入 → pnpm install --frozen-lockfile → pnpm check
