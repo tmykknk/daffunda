@@ -51,6 +51,16 @@ function replaceWeekdays(text: string, today: Date): string {
   );
 }
 
+export function hasUnsupportedRelativeCount(text: string): boolean {
+  const counts = text.matchAll(
+    /(?:[+\-−]\s*)?[\d.,][\d.,eE+\-−/⁄]*(?=(?:分|時間|日)後)/gu,
+  );
+  return [...counts].some(
+    (match) =>
+      !/^\d+$/u.test(match[0]) || !Number.isSafeInteger(Number(match[0])),
+  );
+}
+
 function replaceRelativeTimes(text: string, now: Date): string {
   return text.replace(
     /(\d+)(分|時間)後/gu,

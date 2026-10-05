@@ -1,7 +1,11 @@
 import { ja, type ParsedResult } from "chrono-node";
 import { TOKYO_OFFSET_MINUTES } from "../constants";
 import { normalizeText } from "./normalize";
-import { hasDateTimeHint, prepareReminderText } from "./reminder-preprocess";
+import {
+  hasDateTimeHint,
+  hasUnsupportedRelativeCount,
+  prepareReminderText,
+} from "./reminder-preprocess";
 import { reminderDeadline, resolveReminderInstant } from "./reminder-time";
 
 type ReminderError =
@@ -36,7 +40,11 @@ export function parseReminder(raw: string, now: Date): ReminderResult {
     return { ok: false, code: "UNPARSEABLE" };
   const normalized = normalizeText(raw);
   if (!normalized) return { ok: false, code: "NO_CONTENT" };
-  if (/来月|そのうち/u.test(normalized))
+  // chronoも数値の途中から日時を拾うため、前処理・抽出の前に拒否する。
+  if (
+    /来月|そのうち/u.test(normalized) ||
+    hasUnsupportedRelativeCount(normalized)
+  )
     return { ok: false, code: "UNPARSEABLE" };
   const text = prepareReminderText(normalized, now);
   const results = ja.parse(text, {
