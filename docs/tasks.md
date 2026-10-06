@@ -25,7 +25,12 @@
 - [x] M3 repo + migrations（items, reminders, processed_events）。claim、滞留復旧
 - [x] M4 service（返信文、登録済み/見つからない/予約語/上限、リマインダー登録・一覧・削除、長いリストの分割または省略）
 - [ ] M5 line/verify + Webhook 統合テスト（POST /webhook、署名不正→401、非許可group・未設定→200で無変更、events が空配列→200、
-      再送で二重登録なし、拒否時ログに type と ID のみ。LINEクライアントはモック）
+      再送で二重登録なし、拒否時ログに type と ID のみ。LINEクライアントはモック）。
+      署名検証は公式「Webhookの署名を検証する」(https://developers.line.biz/ja/docs/messaging-api/verify-webhook-signature/) に従う:
+      ボディは検証前にパース・整形・エスケープ解釈をしない（text/arrayBuffer で1回だけ読み、その値を検証に使い、あとで同じ値から JSON をパースする）、
+      HMAC-SHA256・チャネルシークレットが鍵・Base64 で比較（定数時間）、ヘッダー欠落・不一致は 401 で DB と LINE API を呼ばない。
+      テストには、openssl で独立に計算した固定の入力・署名のペア（ダミーの ID を使うこと）を1つ以上置く。
+      次を必ずテストする: 正しい署名で200、ボディ改変・空白追加・ヘッダー欠落で401、events が空で200
 - [ ] M6 scheduled（Cron 送信、二重送信防止、リトライ、3回で failed、429 のログ。Push の再試行キーは公式で仕様確認のうえ採否を decisions.md に記録）
 - [ ] M7a 整理周回（ふるまいを変えない。jscpd ゼロ化、関数分割、命名、constants/messages 集約）
 - [ ] M7b README(日英。LINE の設定は docs/line-setup.md にリンクして要約する)、LICENSE(MIT)、docs/manual-test.md、decisions.md 整理、

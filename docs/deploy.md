@@ -18,6 +18,7 @@
 | `wrangler.toml` | `database_id` は `<YOUR_D1_DATABASE_ID>` のまま。編集しない | する（変更しない） |
 | `mise.local.toml` | `[env]` に `D1_DATABASE_ID` | **しない** |
 | `wrangler.generated.toml` | `scripts/gen-wrangler-config.sh` が生成。実 ID を含む | **しない** |
+| `.dev.vars` | ローカルの `wrangler dev` 用のダミー値（B0 で使う）。実在の値は書かない | **しない**（gitignore 済み） |
 | `.gitignore` | `mise.local.toml`、`wrangler.generated.toml`、`.dev.vars`、`.wrangler` を含む | する |
 
 ## A. 事前準備（いつでも。M5 を待たなくてよい）
@@ -35,6 +36,62 @@
 2. `wr d1 migrations apply <DB名> --local --config wrangler.generated.toml`
 3. `wr d1 execute <DB名> --local --config wrangler.generated.toml --command "SELECT name FROM sqlite_master WHERE type='table'"`
    → items、reminders、processed_events が出ること
+
+## B0. デプロイ前のローカル確認（M5 のマージ後。デプロイの直前）
+
+### 1. 配線の確認
+| コマンド | OK の条件 |
+|---|---|
+| `grep -n "webhook" src/index.ts` | `POST /webhook` が、署名検証 → service → LINE クライアント（実際の `fetch` を使うもの）につながっている。テスト用のモックだけで終わっていない |
+| `grep -nE "env\.|LINE_CHANNEL|ALLOWED_GROUP_ID" src/index.ts` | `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`ALLOWED_GROUP_ID` と D1 のバインディングを `env` から受け取っている |
+| `grep -n "scheduled" src/index.ts` | M6 の前は無い、または空の実装のことがある。無い場合は、デプロイ後に Cron が毎分エラーログを出す可能性がある（害はない。M6 のマージ後に解消） |
+
+### 2. 署名検証のローカル動作確認
+署名の計算を、実装とは別の方法（`openssl`）で行って照合する。テストの期待値が実装側の誤解と一致していても、ここで検出できる。
+
+1. `.dev.vars` を作る（gitignore 済み。ダミー値）
+```
+   LINE_CHANNEL_SECRET=dummy-secret-for-local
+   LINE_CHANNEL_ACCESS_TOKEN=dummy-token
+   ALLOWED_GROUP_ID=C_test_group_1
+```
+2. ターミナル1: `mise exec -- pnpm exec wrangler dev --config wrangler.generated.toml`
+3. ターミナル2:
+```sh
+   BODY='{"destination":"U_test_destination","events":[]}'
+   SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac 'dummy-secret-for-local' -binary | openssl base64)
+
+   # (a) 正しい署名
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/webhook \
+     -H "content-type: application/json" -H "x-line-signature: $SIG" --data-binary "$BODY"
+
+   # (b) ボディを1文字変える
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/webhook \
+     -H "content-type: application/json" -H "x-line-signature: $SIG" --data-binary "${BODY}x"
+
+   # (c) ボディに空白を足す（整形に相当）
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/webhook \
+     -H "content-type: application/json" -H "x-line-signature: $SIG" \
+     --data-binary '{"destination": "U_test_destination", "events": []}'
+
+   # (d) 署名ヘッダーなし
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8787/webhook \
+     -H "content-type: application/json" --data-binary "$BODY"
+```
+
+| 送るもの | 期待する応答 |
+|---|---|
+| (a) 正しい署名、`events` が空 | **200**（LINE コンソールの［検証］ボタンも、`events` が空のボディに署名をつけて送る） |
+| (b) ボディを改変 | **401** |
+| (c) ボディに空白を追加 | **401**（検証の前にボディを整形・パースしていないことの確認） |
+| (d) 署名ヘッダーなし | **401** |
+
+`echo` ではなく `printf '%s'` を使う理由は、環境によって `echo` が末尾の改行や特殊文字を解釈するため。
+
+### 3. 拒否ログの確認（任意）
+許可されていない groupId のメッセージイベントを、正しい署名で送ると、**200 が返り、DB は変わらず、ログに `type` と ID だけが出る**ことを確認する。
+ペイロードがスキーマ検証で弾かれる場合は、テストの fixtures にあるイベントを流用する（イベントの項目は公式のリファレンスを参照）。
+確認後、`wr d1 execute <DB名> --local --config wrangler.generated.toml --command "SELECT count(*) FROM items"` で、件数が増えていないことを見る。
 
 ## B. 初回デプロイ（M5 のマージ後）
 | # | コマンド・操作 | 内容 |
@@ -90,3 +147,4 @@
 | ［検証］が失敗する | line-setup.md §7。Secret が登録済みか（空でないか）も確認 |
 | `database_id` が見つからない・不正 | `mise.local.toml` が正しいか。`gen-wrangler-config.sh` を `mise exec -- ` 付きで実行したか（付けないと環境変数が渡らない） |
 | 生成した設定ファイルが `git status` に出る | `.gitignore` に `wrangler.generated.toml` が無い。追記する |
+| ローカルの署名確認で (a) が 401 になる | `.dev.vars` のシークレットと `openssl` に渡した鍵が同じか。`BODY` と `--data-binary` の本文が完全に同一か（シングルクォートで囲む）。末尾に改行が入っていないか（`printf '%s'`） |
