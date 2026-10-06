@@ -24,7 +24,7 @@
 - [x] M2 domain/reminder-parse。reminder-cases.md 全行を fixtures 化、整合性テスト、実装（TZ 2種で通す）
 - [x] M3 repo + migrations（items, reminders, processed_events）。claim、滞留復旧
 - [x] M4 service（返信文、登録済み/見つからない/予約語/上限、リマインダー登録・一覧・削除、長いリストの分割または省略）
-- [ ] M5 line/verify + Webhook 統合テスト（POST /webhook、署名不正→401、非許可group・未設定→200で無変更、events が空配列→200、
+- [x] M5 line/verify + Webhook 統合テスト（POST /webhook、署名不正→401、非許可group・未設定→200で無変更、events が空配列→200、
       再送で二重登録なし、拒否時ログに type と ID のみ。LINEクライアントはモック）。
       署名検証は公式「Webhookの署名を検証する」(https://developers.line.biz/ja/docs/messaging-api/verify-webhook-signature/) に従う:
       ボディは検証前にパース・整形・エスケープ解釈をしない（text/arrayBuffer で1回だけ読み、その値を検証に使い、あとで同じ値から JSON をパースする）、
