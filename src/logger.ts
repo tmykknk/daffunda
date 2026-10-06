@@ -4,6 +4,15 @@ export function logError(code: ErrorCode): void {
   console.error(JSON.stringify({ code }));
 }
 
+export function logPushFailure(status?: number): void {
+  const code = status === 429 ? "LINE_PUSH_RATE_LIMIT" : "LINE_PUSH_FAILED";
+  console.error(JSON.stringify({ code, status }));
+}
+
+export function logRetryExpired(): void {
+  console.error(JSON.stringify({ code: "LINE_PUSH_RETRY_EXPIRED" }));
+}
+
 export function logRejected(
   source: Readonly<{
     type: string;

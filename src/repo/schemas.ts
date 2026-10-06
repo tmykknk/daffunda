@@ -35,6 +35,7 @@ const reminderFields = {
     v.maxValue(MAX_REMINDER_ATTEMPTS),
   ),
   retry_key: v.nullable(text),
+  retry_started_at: v.nullable(time),
   sent_at: v.nullable(time),
   updated_at: v.nullable(time),
 };
@@ -51,6 +52,8 @@ export const claimedSchema = v.pipe(
     ...reminderFields,
     status: v.literal("sending"),
     claim_token: text,
+    retry_key: text,
+    retry_started_at: time,
   }),
   v.readonly(),
 );

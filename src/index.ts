@@ -1,7 +1,10 @@
+import type { ScheduledController } from "@cloudflare/workers-types";
 import { Hono } from "hono";
+import { createPushClient } from "./line/push";
 import { createReplyClient } from "./line/reply";
 import { logError } from "./logger";
 import { MESSAGES } from "./messages";
+import { type ScheduledOptions, sendDueReminders } from "./service/scheduled";
 import {
   receiveWebhook,
   type WebhookBindings,
@@ -27,4 +30,23 @@ export function createApp(
   return app;
 }
 
-export default createApp();
+export function createScheduled(
+  options: ScheduledOptions = {
+    push: createPushClient(),
+    now: () => new Date(),
+  },
+) {
+  return async (
+    _controller: ScheduledController,
+    bindings: WebhookBindings,
+  ): Promise<void> => {
+    try {
+      await sendDueReminders(bindings, options);
+    } catch {
+      logError("INTERNAL_ERROR");
+      throw new Error("CRON_FAILED");
+    }
+  };
+}
+
+export default Object.assign(createApp(), { scheduled: createScheduled() });
