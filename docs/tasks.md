@@ -35,6 +35,12 @@
 - [x] M7a 整理周回（ふるまいを変えない。jscpd ゼロ化、関数分割、命名、constants/messages 集約）
 - [ ] M7b README(日英。LINE の設定は docs/line-setup.md にリンクして要約する)、LICENSE(MIT)、docs/manual-test.md、decisions.md 整理、
       pnpm check の最終確認、test/fixtures の pending が0件であること（残る場合は PR 本文の「未解決」に理由を書いて人間の判断を待つ）
-- [ ] R 自己レビュー周回（任意）: spec・AGENTS.md・conventions・tooling と全コードを突き合わせて逸脱を列挙し、修正と再発防止のテスト/規則追加を行う
+- [x] R 自己レビュー周回（任意）: spec・AGENTS.md・conventions・tooling と全コードを突き合わせて逸脱を列挙し、修正と再発防止のテスト/規則追加を行う
 - [ ] M8（任意・実験後）GitHub Actions による自動デプロイ。Environment secrets＋手動承認、main マージ後のみ。
       ワークフローを書くだけで、動作確認とシークレット登録は人間が行う
+
+- [ ] I1 リマインダー取消ボタン（独立した改善タスク、Rでは未実装）:
+      登録確認・一覧に内部IDを保持する取消ボタンを追加する。番号のリセット・再利用・一覧の振り直しは行わない。
+      操作時に許可グループと対象の所属を検証し、古いボタンで別の予定を取り消せないことをテストする。
+      取消済み・送信済みは状態に応じて案内し、「リマインド削除 N」は残す。
+      実装前にLINE公式Markdownで具体的なメッセージ形式とイベント仕様を確認する（D-48）。
