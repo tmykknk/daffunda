@@ -1001,3 +1001,112 @@ test("claimバッチの途中失敗でも前の行の状態・キー・開始時
   await runCron();
   expect(push).toHaveBeenCalledTimes(2);
 });
+
+test("不正な月の登録は拒否し、再送でも業務データを作らない", async () => {
+  const event = textEvent("/テスト 13/5", "test-invalid-month");
+  expect((await postEvents([event])).status).toBe(200);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  expect((await postEvents([event])).status).toBe(200);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  expect(lineReply).toHaveBeenCalledTimes(1);
+});
+
+test("登録失敗はイベント記録も戻し、同時再送では1件だけ登録する", async () => {
+  await env.DB.exec(
+    "CREATE TRIGGER test_register_failure BEFORE INSERT ON reminders BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+  );
+  const event = textEvent("/テスト 明日", "test-register-rollback");
+  expect((await postEvents([event])).status).toBe(500);
+  expect(await events().get("test-register-rollback")).toBeNull();
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  await env.DB.exec("DROP TRIGGER test_register_failure");
+  const responses = await Promise.all([
+    postEvents([event]),
+    postEvents([event]),
+  ]);
+  expect(responses.map((response) => response.status)).toEqual([200, 200]);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(lineReply).toHaveBeenCalledTimes(1);
+});
+
+test("取消で一覧が空になっても内部IDを再利用せず古いIDは無効", async () => {
+  const old = await register();
+  if (!old) throw new Error("登録失敗");
+  expect(await reminders().cancel(group, old.id, now)).toBe(true);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  const current = await register();
+  if (!current) throw new Error("登録失敗");
+  expect(current.id).toBeGreaterThan(old.id);
+  expect(await reminders().cancel(group, old.id, now)).toBe(false);
+  expect(await reminders().cancel(otherGroup, current.id, now)).toBe(false);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+});
+
+test("滞留復旧中に旧Pushが完了しても新claimを上書きしない", async () => {
+  // 公式「APIリクエストを再試行する」: 復旧時も同じX-Line-Retry-Key。
+  await register();
+  let started = () => {};
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let complete = () => {};
+  const pending = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  push.mockImplementationOnce(async () => {
+    started();
+    await pending;
+  });
+  const oldRun = runCron();
+  await entered;
+  await runCron(new Date(now.getTime() + 300_001));
+  complete();
+  await oldRun;
+  expect(push).toHaveBeenCalledTimes(2);
+  expect(push.mock.calls[0]).toEqual(push.mock.calls[1]);
+  const result = await env.DB.prepare(
+    "SELECT status, attempts FROM reminders",
+  ).all();
+  expect(result.results).toEqual([{ status: "sent", attempts: 0 }]);
+});
+
+test("初期スキーマからの更新は既存予定と処理済みイベントを保持する", async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS.slice(0, 1));
+  await env.DB.prepare(
+    "INSERT INTO reminders (group_id, content, remind_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+  )
+    .bind(
+      group,
+      "移行テスト",
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    )
+    .run();
+  await events().record("test-legacy-event", now);
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+  expect(
+    await env.DB.prepare(
+      "SELECT event_id, operation_key FROM processed_events WHERE event_id = ?",
+    )
+      .bind("test-legacy-event")
+      .first(),
+  ).toEqual({ event_id: "test-legacy-event", operation_key: null });
+  expect(await reminders().listUnsent(group)).toMatchObject([
+    {
+      content: "移行テスト",
+      status: "pending",
+      attempts: 0,
+      retry_started_at: null,
+    },
+  ]);
+  expect(
+    (await postEvents([textEvent("/テスト 明日", "test-legacy-event")])).status,
+  ).toBe(200);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(lineReply).not.toHaveBeenCalled();
+  await runCron();
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
