@@ -1,4 +1,9 @@
-import { MAX_REPLY_TEXT_LENGTH, PUSH_TIMEOUT_MS } from "../constants";
+import {
+  HTTP_STATUS,
+  LINE_ENDPOINTS,
+  MAX_TEXT_MESSAGE_LENGTH,
+  PUSH_TIMEOUT_MS,
+} from "../constants";
 
 type Fetcher = (
   url: string,
@@ -32,13 +37,13 @@ export function createPushClient(
       !token ||
       !to ||
       !text ||
-      text.length > MAX_REPLY_TEXT_LENGTH ||
+      text.length > MAX_TEXT_MESSAGE_LENGTH ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         retryKey,
       )
     )
       throw new Error("LINE_PUSH_INVALID");
-    const response = await fetcher("https://api.line.me/v2/bot/message/push", {
+    const response = await fetcher(LINE_ENDPOINTS.push, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -50,7 +55,7 @@ export function createPushClient(
     });
     if (
       response.ok ||
-      (response.status === 409 &&
+      (response.status === HTTP_STATUS.conflict &&
         response.headers.get("x-line-accepted-request-id"))
     )
       return;

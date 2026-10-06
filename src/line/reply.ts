@@ -1,4 +1,4 @@
-import { MAX_REPLY_TEXT_LENGTH } from "../constants";
+import { LINE_ENDPOINTS, MAX_TEXT_MESSAGE_LENGTH } from "../constants";
 
 type Fetcher = (
   url: string,
@@ -15,9 +15,9 @@ export function createReplyClient(fetcher: Fetcher = fetch) {
     replyToken: string,
     text: string,
   ): Promise<void> => {
-    if (!token || !replyToken || !text || text.length > MAX_REPLY_TEXT_LENGTH)
+    if (!token || !replyToken || !text || text.length > MAX_TEXT_MESSAGE_LENGTH)
       throw new Error("LINE_REPLY_INVALID");
-    const response = await fetcher("https://api.line.me/v2/bot/message/reply", {
+    const response = await fetcher(LINE_ENDPOINTS.reply, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

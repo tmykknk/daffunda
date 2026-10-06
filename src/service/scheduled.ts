@@ -1,10 +1,9 @@
-import { MAX_REPLY_TEXT_LENGTH, MILLISECONDS_PER_DAY } from "../constants";
+import { MILLISECONDS_PER_DAY } from "../constants";
 import { type createPushClient, PushFailure } from "../line/push";
 import { configured } from "../line/webhook-schema";
 import { logPushFailure, logRetryExpired } from "../logger";
-import { REPLY_TEXT } from "../messages";
 import { createRemindersRepo } from "../repo/reminders";
-import { shortenContent } from "./replies";
+import { reminderPushText } from "./replies";
 import type { WebhookBindings } from "./webhook";
 
 export type ScheduledOptions = Readonly<{
@@ -14,7 +13,7 @@ export type ScheduledOptions = Readonly<{
 type Repo = ReturnType<typeof createRemindersRepo>;
 type Claimed = Awaited<ReturnType<Repo["claimDue"]>>[number];
 
-async function deliverClaim(
+async function processClaim(
   claimed: Claimed,
   repo: Repo,
   token: string,
@@ -30,12 +29,16 @@ async function deliverClaim(
     if (await repo.expireClaim(claimed, now)) logRetryExpired();
     return;
   }
-  const text =
-    REPLY_TEXT.pushPrefix +
-    shortenContent(
-      claimed.content,
-      MAX_REPLY_TEXT_LENGTH - REPLY_TEXT.pushPrefix.length,
-    );
+  await deliverClaim(claimed, repo, token, options);
+}
+
+async function deliverClaim(
+  claimed: Claimed,
+  repo: Repo,
+  token: string,
+  options: ScheduledOptions,
+) {
+  const text = reminderPushText(claimed.content);
   try {
     await options.push(token, claimed.group_id, text, claimed.retry_key);
   } catch (error) {
@@ -58,5 +61,5 @@ export async function sendDueReminders(
   await repo.recoverStale(now);
   const claimed = await repo.claimDue(now);
   for (const reminder of claimed)
-    await deliverClaim(reminder, repo, token, options);
+    await processClaim(reminder, repo, token, options);
 }

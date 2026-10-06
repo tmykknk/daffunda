@@ -1,0 +1,34 @@
+[
+  {
+    "id": "T-01",
+    "character": "あ",
+    "repeat": 1,
+    "pushLength": 10,
+    "pushRepeat": 1,
+    "pushSuffix": ""
+  },
+  {
+    "id": "T-02",
+    "character": "あ",
+    "repeat": 4991,
+    "pushLength": 5000,
+    "pushRepeat": 4991,
+    "pushSuffix": ""
+  },
+  {
+    "id": "T-03",
+    "character": "あ",
+    "repeat": 4992,
+    "pushLength": 5000,
+    "pushRepeat": 4990,
+    "pushSuffix": "…"
+  },
+  {
+    "id": "T-04",
+    "character": "😀",
+    "repeat": 3000,
+    "pushLength": 5000,
+    "pushRepeat": 2495,
+    "pushSuffix": "…"
+  }
+]

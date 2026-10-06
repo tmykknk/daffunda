@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "./constants";
+
 type ErrorCode = "INTERNAL_ERROR";
 
 export function logError(code: ErrorCode): void {
@@ -5,7 +7,10 @@ export function logError(code: ErrorCode): void {
 }
 
 export function logPushFailure(status?: number): void {
-  const code = status === 429 ? "LINE_PUSH_RATE_LIMIT" : "LINE_PUSH_FAILED";
+  const code =
+    status === HTTP_STATUS.tooManyRequests
+      ? "LINE_PUSH_RATE_LIMIT"
+      : "LINE_PUSH_FAILED";
   console.error(JSON.stringify({ code, status }));
 }
 

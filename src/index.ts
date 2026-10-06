@@ -1,5 +1,6 @@
 import type { ScheduledController } from "@cloudflare/workers-types";
 import { Hono } from "hono";
+import { HTTP_STATUS } from "./constants";
 import { createPushClient } from "./line/push";
 import { createReplyClient } from "./line/reply";
 import { logError } from "./logger";
@@ -25,7 +26,10 @@ export function createApp(
   });
   app.onError((_error, context) => {
     logError("INTERNAL_ERROR");
-    return context.text(MESSAGES.internalError, 500);
+    return context.text(
+      MESSAGES.internalError,
+      HTTP_STATUS.internalServerError,
+    );
   });
   return app;
 }

@@ -48,5 +48,19 @@ export const MAX_REMINDER_ATTEMPTS = 3;
 export const REMINDER_STALE_AFTER_MS = 5 * MILLISECONDS_PER_MINUTE;
 
 // 公式「テキストメッセージ」: UTF-16符号単位で数える最大文字数。
-export const MAX_REPLY_TEXT_LENGTH = 5000;
+export const MAX_TEXT_MESSAGE_LENGTH = 5000;
 export const PUSH_TIMEOUT_MS = 10_000;
+
+// 公式「応答メッセージを送る」「プッシュメッセージを送る」。
+export const LINE_ENDPOINTS = Object.freeze({
+  reply: "https://api.line.me/v2/bot/message/reply",
+  push: "https://api.line.me/v2/bot/message/push",
+});
+export const HTTP_STATUS = Object.freeze({
+  ok: 200,
+  badRequest: 400,
+  unauthorized: 401,
+  conflict: 409,
+  tooManyRequests: 429,
+  internalServerError: 500,
+});
