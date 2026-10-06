@@ -3,6 +3,7 @@ import { TOKYO_OFFSET_MINUTES } from "../constants";
 import { normalizeText } from "./normalize";
 import {
   hasDateTimeHint,
+  hasInvalidNumericDate,
   hasUnsupportedRelativeCount,
   prepareReminderText,
 } from "./reminder-preprocess";
@@ -43,6 +44,7 @@ export function parseReminder(raw: string, now: Date): ReminderResult {
   // chronoも数値の途中から日時を拾うため、前処理・抽出の前に拒否する。
   if (
     /来月|そのうち/u.test(normalized) ||
+    hasInvalidNumericDate(normalized) ||
     hasUnsupportedRelativeCount(normalized)
   )
     return { ok: false, code: "UNPARSEABLE" };
