@@ -20,6 +20,22 @@ type NewReminder = Readonly<{
   now: Date;
 }>;
 
+function prepareReminderClaim(db: D1Database, id: number, timestamp: string) {
+  // 各行に独立したUUIDをbindし、同時Cronでもpendingを取れたバッチだけが所有する。
+  return db
+    .prepare(
+      "UPDATE reminders SET status = 'sending', updated_at = ?, claim_token = ?, retry_key = COALESCE(retry_key, ?), retry_started_at = COALESCE(retry_started_at, ?) WHERE id = ? AND status = 'pending' AND remind_at <= ? RETURNING *",
+    )
+    .bind(
+      timestamp,
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      timestamp,
+      id,
+      timestamp,
+    );
+}
+
 export function createRemindersRepo(db: D1Database, scope?: EventScope) {
   return {
     async create(input: NewReminder) {
@@ -67,22 +83,8 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
         .all();
       const rows = parseRows(reminderSchema, candidates.results);
       if (!rows.length) return [];
-      // 各行に独立したUUIDをbindし、同時Cronでもpendingを取れたバッチだけが所有する。
       const results = await db.batch(
-        rows.map((row) =>
-          db
-            .prepare(
-              "UPDATE reminders SET status = 'sending', updated_at = ?, claim_token = ?, retry_key = COALESCE(retry_key, ?), retry_started_at = COALESCE(retry_started_at, ?) WHERE id = ? AND status = 'pending' AND remind_at <= ? RETURNING *",
-            )
-            .bind(
-              timestamp,
-              crypto.randomUUID(),
-              crypto.randomUUID(),
-              timestamp,
-              row.id,
-              timestamp,
-            ),
-        ),
+        rows.map((row) => prepareReminderClaim(db, row.id, timestamp)),
       );
       return parseRows(
         claimedSchema,

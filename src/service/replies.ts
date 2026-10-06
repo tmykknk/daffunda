@@ -1,5 +1,5 @@
 import {
-  MAX_REPLY_TEXT_LENGTH,
+  MAX_TEXT_MESSAGE_LENGTH,
   MILLISECONDS_PER_MINUTE,
   TOKYO_OFFSET_MINUTES,
   WEEKDAY_NAMES,
@@ -25,14 +25,14 @@ export function boundedList(lines: readonly string[], empty: string): string {
     const withSuffix = remaining
       ? `${candidate}\n${REPLY_TEXT.omitted(remaining)}`
       : candidate;
-    if (withSuffix.length > MAX_REPLY_TEXT_LENGTH)
+    if (withSuffix.length > MAX_TEXT_MESSAGE_LENGTH)
       return [...included, REPLY_TEXT.omitted(lines.length - index)].join("\n");
     included.push(line);
   }
   return included.join("\n");
 }
 
-export function shortenContent(content: string, maximum: number): string {
+function shortenContent(content: string, maximum: number): string {
   if (content.length <= maximum) return content;
   const characters: string[] = [];
   let length = REPLY_TEXT.truncated.length;
@@ -51,6 +51,17 @@ export function registrationReply(
 ): string {
   const prefix = REPLY_TEXT.registrationPrefix(id);
   const suffix = REPLY_TEXT.registrationSuffix(id, time);
-  const maximum = MAX_REPLY_TEXT_LENGTH - prefix.length - suffix.length;
+  const maximum = MAX_TEXT_MESSAGE_LENGTH - prefix.length - suffix.length;
   return prefix + shortenContent(content, maximum) + suffix;
+}
+
+// 公式「テキストメッセージ」: 接頭辞を含めたUTF-16上限で省略する。
+export function reminderPushText(content: string): string {
+  return (
+    REPLY_TEXT.pushPrefix +
+    shortenContent(
+      content,
+      MAX_TEXT_MESSAGE_LENGTH - REPLY_TEXT.pushPrefix.length,
+    )
+  );
 }

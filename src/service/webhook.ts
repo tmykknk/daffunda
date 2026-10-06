@@ -1,5 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import * as v from "valibot";
+import { HTTP_STATUS } from "../constants";
 import { parse } from "../domain/parser";
 import type { createReplyClient } from "../line/reply";
 import { verifySignature } from "../line/verify";
@@ -23,6 +24,13 @@ export type WebhookBindings = Readonly<{
 export type WebhookOptions = Readonly<{
   reply: ReturnType<typeof createReplyClient>;
   now: () => Date;
+}>;
+type CommandEvent = Readonly<{
+  text: string;
+  groupId: string;
+  userId: string | null;
+  eventId: string;
+  replyToken: string;
 }>;
 
 function permitted(event: WebhookEvent, allowed: string | undefined): boolean {
@@ -54,16 +62,35 @@ async function handleEvent(
     return;
   const parsed = v.safeParse(textMessageSchema, event.message);
   if (!parsed.success || parse(parsed.output.text).type === "ignore") return;
+  await respondToCommand(
+    {
+      text: parsed.output.text,
+      groupId: event.source.groupId,
+      userId: event.source.userId ?? null,
+      eventId: event.webhookEventId,
+      replyToken: event.replyToken,
+    },
+    env,
+    options,
+  );
+}
+
+// 公式「応答メッセージを送る」: 業務確定後、受信したtokenを速やかに一度だけ使う。
+async function respondToCommand(
+  event: CommandEvent,
+  env: WebhookBindings,
+  options: WebhookOptions,
+): Promise<void> {
   if (!configured(env.LINE_CHANNEL_ACCESS_TOKEN))
     throw new Error("LINE_TOKEN_MISSING");
   const now = options.now();
-  const repos = createWebhookRepos(env.DB, event.webhookEventId, now);
+  const repos = createWebhookRepos(env.DB, event.eventId, now);
   try {
     const text = await handleText(
       {
-        text: parsed.output.text,
-        groupId: event.source.groupId,
-        userId: event.source.userId ?? null,
+        text: event.text,
+        groupId: event.groupId,
+        userId: event.userId,
         now,
       },
       repos,
@@ -94,16 +121,16 @@ export async function receiveWebhook(
       env.LINE_CHANNEL_SECRET,
     ))
   )
-    return 401;
+    return HTTP_STATUS.unauthorized;
   let payload: unknown;
   try {
     payload = JSON.parse(new TextDecoder().decode(body));
   } catch {
-    return 400;
+    return HTTP_STATUS.badRequest;
   }
   const decoded = v.safeParse(webhookSchema, payload);
-  if (!decoded.success) return 400;
+  if (!decoded.success) return HTTP_STATUS.badRequest;
   for (const event of decoded.output.events)
     await handleEvent(event, env, options);
-  return 200;
+  return HTTP_STATUS.ok;
 }
