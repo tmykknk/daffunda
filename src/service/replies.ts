@@ -32,7 +32,7 @@ export function boundedList(lines: readonly string[], empty: string): string {
   return included.join("\n");
 }
 
-function shortenContent(content: string, maximum: number): string {
+export function shortenContent(content: string, maximum: number): string {
   if (content.length <= maximum) return content;
   const characters: string[] = [];
   let length = REPLY_TEXT.truncated.length;

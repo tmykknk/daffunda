@@ -1,11 +1,13 @@
 import { applyD1Migrations, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createApp } from "../src/index";
+import worker, { createApp, createScheduled } from "../src/index";
+import { createPushClient } from "../src/line/push";
 import { createItemsRepo } from "../src/repo/items";
 import { createEventsRepo } from "../src/repo/processed-events";
 import { createRemindersRepo } from "../src/repo/reminders";
 import { handleText } from "../src/service/commands";
+import { sendDueReminders } from "../src/service/scheduled";
 import type { WebhookBindings } from "../src/service/webhook";
 
 import { WEBHOOK_SIGNATURE } from "./fixtures/webhook-signature";
@@ -733,4 +735,269 @@ test("openssl固定署名: 正しいbodyは200、改変・空白追加・ヘッ�
   }
   expect(lineReply).not.toHaveBeenCalled();
   expect(await items().list(group)).toEqual([]);
+});
+
+const push = vi.fn<Parameters<typeof sendDueReminders>[1]["push"]>(
+  async () => {},
+);
+const cronBindings = {
+  DB: env.DB,
+  LINE_CHANNEL_ACCESS_TOKEN: "test-access-token",
+};
+const cronOptions = (at = now) => ({ push, now: () => at });
+const runCron = (at = now) => sendDueReminders(cronBindings, cronOptions(at));
+
+afterEach(() => push.mockReset());
+
+// 公式「プッシュメッセージを送る」「APIリクエストを再試行する」: 永続UUIDを最初から使う。
+test("Cronは同時起動でも期限到来分を一度だけ送り、未来・取消を送らない", async () => {
+  await register();
+  await register("別グループ", now, otherGroup);
+  await register("未来", new Date(now.getTime() + 60_000));
+  const canceled = await register("取消");
+  await reminders().cancel(group, canceled.id, now);
+  await Promise.all([runCron(), runCron()]);
+  expect(push).toHaveBeenCalledTimes(2);
+  const calls = push.mock.calls;
+  expect(calls).toEqual(
+    expect.arrayContaining([
+      [
+        "test-access-token",
+        group,
+        "⏰ リマインド: テスト",
+        expect.stringMatching(/^[0-9a-f-]{36}$/),
+      ],
+      [
+        "test-access-token",
+        otherGroup,
+        "⏰ リマインド: 別グループ",
+        expect.stringMatching(/^[0-9a-f-]{36}$/),
+      ],
+    ]),
+  );
+  expect(new Set(calls.map((call) => call[3])).size).toBe(2);
+  await runCron();
+  expect(push).toHaveBeenCalledTimes(2);
+  const rows = await env.DB.prepare(
+    "SELECT status, attempts, sent_at FROM reminders WHERE status = ?",
+  )
+    .bind("sent")
+    .all();
+  expect(rows.results).toEqual([
+    { status: "sent", attempts: 0, sent_at: now.toISOString() },
+    { status: "sent", attempts: 0, sent_at: now.toISOString() },
+  ]);
+});
+
+test("送信対象がないCronはAPIもログも呼ばず、token欠落・仮値はDBを変えない", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await runCron();
+  expect(log).not.toHaveBeenCalled();
+  await register();
+  for (const token of [undefined, "", "<YOUR_TOKEN>"]) {
+    await sendDueReminders(
+      {
+        DB: env.DB,
+        ...(token === undefined ? {} : { LINE_CHANNEL_ACCESS_TOKEN: token }),
+      },
+      cronOptions(),
+    );
+  }
+  expect(push).not.toHaveBeenCalled();
+  expect((await reminders().listUnsent(group))[0]).toMatchObject({
+    status: "pending",
+    attempts: 0,
+    retry_key: null,
+  });
+});
+
+test("Cronの失敗は同じキーで再試行し、3回失敗でfailed、429を本文なしで記録する", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await register();
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createPushClient>[0]>>(
+    async () => ({ ok: false, status: 429, headers: new Headers() }),
+  );
+  const options = { push: createPushClient(fetcher), now: () => now };
+  for (const attempts of [1, 2, 3]) {
+    await sendDueReminders(cronBindings, options);
+    expect((await reminders().listUnsent(group))[0]).toMatchObject({
+      attempts,
+      status: attempts === 3 ? "failed" : "pending",
+    });
+  }
+  await sendDueReminders(cronBindings, options);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(
+    new Set(
+      fetcher.mock.calls.map((call) => call[1].headers["X-Line-Retry-Key"]),
+    ).size,
+  ).toBe(1);
+  expect(log.mock.calls).toEqual(
+    Array.from({ length: 3 }, () => [
+      '{"code":"LINE_PUSH_RATE_LIMIT","status":429}',
+    ]),
+  );
+});
+
+test("1件のPush失敗でも後続を送り、次回成功ではattemptsを維持する", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await register();
+  await register("後続");
+  push.mockRejectedValueOnce(new Error("テストの秘密本文"));
+  await runCron();
+  expect(push).toHaveBeenCalledTimes(2);
+  expect((await reminders().listUnsent(group))[0]).toMatchObject({
+    attempts: 1,
+    status: "pending",
+  });
+  await runCron(new Date(now.getTime() + 60_000));
+  expect(push.mock.calls[2]?.[3]).toBe(push.mock.calls[0]?.[3]);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("sendingは5分超で復旧し、キーを維持して送り、古いclaimは完了できない", async () => {
+  await register();
+  const [old] = await reminders().claimDue(now);
+  if (!old) throw new Error("claimが空です");
+  await runCron(new Date(now.getTime() + 300_000));
+  expect(push).not.toHaveBeenCalled();
+  const later = new Date(now.getTime() + 300_001);
+  await runCron(later);
+  expect(push.mock.calls[0]?.[3]).toBe(old.retry_key);
+  expect(await reminders().markFailed(old, later)).toBe(false);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("24時間ちょうど以降の再試行はPushせずfailedにして、キーを更新しない", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await register();
+  push.mockRejectedValueOnce(new Error("timeout"));
+  await runCron();
+  const original = (await reminders().listUnsent(group))[0];
+  await runCron(new Date(now.getTime() + 86_400_000));
+  expect(push).toHaveBeenCalledTimes(1);
+  expect((await reminders().listUnsent(group))[0]).toMatchObject({
+    status: "failed",
+    attempts: 1,
+    retry_key: original?.retry_key,
+    retry_started_at: now.toISOString(),
+  });
+});
+
+test("scheduledハンドラからCronを呼び、既定配線はモックfetchでPushする", async () => {
+  await register();
+  const controller = {
+    scheduledTime: now.getTime(),
+    cron: "* * * * *",
+    noRetry() {},
+  };
+  await createScheduled(cronOptions())(controller, cronBindings);
+  expect(push).toHaveBeenCalledTimes(1);
+  await register("既定配線");
+  const fetcher = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response("{}", { status: 200 }));
+  await worker.scheduled(controller, cronBindings);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("Push受理後のDB完了失敗はsendingを保ち、復旧後の受理済み409でsentになる", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await register();
+  await env.DB.exec(
+    "CREATE TRIGGER test_sent_failure BEFORE UPDATE OF status ON reminders WHEN NEW.status = 'sent' BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+  );
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createPushClient>[0]>>(
+    async () => ({ ok: true, status: 200, headers: new Headers() }),
+  );
+  const options = { push: createPushClient(fetcher), now: () => now };
+  const controller = {
+    scheduledTime: now.getTime(),
+    cron: "* * * * *",
+    noRetry() {},
+  };
+  await expect(
+    createScheduled(options)(controller, cronBindings),
+  ).rejects.toThrow("CRON_FAILED");
+  expect((await reminders().listUnsent(group))[0]).toMatchObject({
+    status: "sending",
+    attempts: 0,
+  });
+  expect(log).toHaveBeenCalledExactlyOnceWith('{"code":"INTERNAL_ERROR"}');
+  await env.DB.exec("DROP TRIGGER test_sent_failure");
+  fetcher.mockResolvedValue({
+    ok: false,
+    status: 409,
+    headers: new Headers({ "x-line-accepted-request-id": "test-accepted" }),
+  });
+  await sendDueReminders(cronBindings, {
+    ...options,
+    now: () => new Date(now.getTime() + 300_001),
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher.mock.calls[1]?.[1].body).toBe(fetcher.mock.calls[0]?.[1].body);
+  expect(fetcher.mock.calls[1]?.[1].headers["X-Line-Retry-Key"]).toBe(
+    fetcher.mock.calls[0]?.[1].headers["X-Line-Retry-Key"],
+  );
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("送信開始前に取消されたclaimを送らず、送信中の取消も遅い結果で上書きしない", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const first = await register("最初");
+  const second = await register("取消対象");
+  push.mockImplementationOnce(async () => {
+    await reminders().cancel(group, second.id, now);
+  });
+  await runCron();
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  expect(first.id).not.toBe(second.id);
+  for (const outcome of ["failure", "success"]) {
+    const row = await register("送信中取消");
+    push.mockImplementationOnce(async () => {
+      await reminders().cancel(group, row.id, now);
+      if (outcome === "failure") throw new Error("テスト本文");
+    });
+    await runCron();
+    expect(await reminders().listUnsent(group)).toEqual([]);
+  }
+  expect(log).not.toHaveBeenCalled();
+});
+
+test("長いPush本文はUTF-16上限内に省略し、24時間未満なら同じ本文で再試行する", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await register("😀".repeat(3000));
+  push.mockRejectedValueOnce(new Error("timeout"));
+  await runCron();
+  await runCron(new Date(now.getTime() + 86_399_999));
+  expect(push).toHaveBeenCalledTimes(2);
+  const text = push.mock.calls[0]?.[2] ?? "";
+  expect(text.length).toBeLessThanOrEqual(5000);
+  expect(text).toMatch(/^⏰ リマインド: (😀)+…$/u);
+  expect(push.mock.calls[1]).toEqual(push.mock.calls[0]);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("claimバッチの途中失敗でも前の行の状態・キー・開始時刻はロールバックする", async () => {
+  await register("最初");
+  await register("claim失敗");
+  await env.DB.exec(
+    "CREATE TRIGGER test_claim_failure BEFORE UPDATE OF status ON reminders WHEN NEW.status = 'sending' AND NEW.content = 'claim失敗' BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+  );
+  await expect(runCron()).rejects.toThrow();
+  expect(push).not.toHaveBeenCalled();
+  const rows = await reminders().listUnsent(group);
+  expect(rows).toHaveLength(2);
+  for (const row of rows)
+    expect(row).toMatchObject({
+      status: "pending",
+      retry_key: null,
+      retry_started_at: null,
+      claim_token: null,
+    });
+  await env.DB.exec("DROP TRIGGER test_claim_failure");
+  await runCron();
+  expect(push).toHaveBeenCalledTimes(2);
 });

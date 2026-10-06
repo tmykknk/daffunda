@@ -59,13 +59,58 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
     },
     async claimDue(now: Date) {
       const timestamp = utcTimestamp(now);
+      const candidates = await db
+        .prepare(
+          "SELECT * FROM reminders WHERE status = 'pending' AND remind_at <= ? ORDER BY remind_at, id",
+        )
+        .bind(timestamp)
+        .all();
+      const rows = parseRows(reminderSchema, candidates.results);
+      if (!rows.length) return [];
+      // 各行に独立したUUIDをbindし、同時Cronでもpendingを取れたバッチだけが所有する。
+      const results = await db.batch(
+        rows.map((row) =>
+          db
+            .prepare(
+              "UPDATE reminders SET status = 'sending', updated_at = ?, claim_token = ?, retry_key = COALESCE(retry_key, ?), retry_started_at = COALESCE(retry_started_at, ?) WHERE id = ? AND status = 'pending' AND remind_at <= ? RETURNING *",
+            )
+            .bind(
+              timestamp,
+              crypto.randomUUID(),
+              crypto.randomUUID(),
+              timestamp,
+              row.id,
+              timestamp,
+            ),
+        ),
+      );
+      return parseRows(
+        claimedSchema,
+        results.flatMap((result) => result.results),
+      );
+    },
+    async ownsClaim(claimed: ClaimedReminder) {
       const result = await db
         .prepare(
-          "UPDATE reminders SET status = 'sending', updated_at = ?, claim_token = ? WHERE status = 'pending' AND remind_at <= ? RETURNING *",
+          "SELECT * FROM reminders WHERE id = ? AND group_id = ? AND status = 'sending' AND claim_token = ?",
         )
-        .bind(timestamp, crypto.randomUUID(), timestamp)
+        .bind(claimed.id, claimed.group_id, claimed.claim_token)
         .all();
-      return parseRows(claimedSchema, result.results);
+      return parseRows(claimedSchema, result.results).length === 1;
+    },
+    async expireClaim(claimed: ClaimedReminder, now: Date) {
+      const result = await db
+        .prepare(
+          "UPDATE reminders SET status = 'failed', updated_at = ?, claim_token = NULL WHERE id = ? AND group_id = ? AND status = 'sending' AND claim_token = ?",
+        )
+        .bind(
+          utcTimestamp(now),
+          claimed.id,
+          claimed.group_id,
+          claimed.claim_token,
+        )
+        .run();
+      return result.meta.changes === 1;
     },
     async recoverStale(now: Date) {
       const timestamp = utcTimestamp(now);

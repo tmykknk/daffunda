@@ -41,8 +41,10 @@ Webhook: `POST /webhook`（他のパスは 404）
 - 送信対象がない回は何もせず、ログも出さない
 - Push 成功 → 'sent'。失敗 → attempts+1 で 'pending' に戻し、3回失敗で 'failed'（失敗理由をログ。429 は特に明記）
 - 'sending' のまま5分超のものは 'pending' に戻す（クラッシュ対策。at-least-once を許容）
-- Push の二重送信対策として、リマインダーごとの UUID（retry_key）を再試行キー（X-Line-Retry-Key）として付与する案。
-  仕様（ヘッダー名、有効期限、再利用条件）は公式で確認し、採否を docs/decisions.md に記録。不採用なら列を使わない
+- Push の二重送信対策に、リマインダーごとのUUID（retry_key）をX-Line-Retry-Keyとして付与する（decisions D-43）。
+  初回claimでUUIDとretry_started_atを保存し、再試行・滞留復旧でも同じ宛先・本文・キーを使う。
+  受理済みを示すヘッダー付き409は成功としてsentにする。初回claimから24時間以上ならPushせずfailedにし、attemptsは増やさない。
+  token未設定・仮値はDBを変更せず送信しない。Pushは10秒でタイムアウトし、失敗時は次のCronで再試行する。
 - 送信文: `⏰ リマインド: 歯医者`
 - 送信先は reminders.group_id
 
@@ -65,10 +67,11 @@ reminders(
   id INTEGER PRIMARY KEY, group_id TEXT NOT NULL, content TEXT NOT NULL, remind_at TEXT NOT NULL,
   created_by TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   status TEXT NOT NULL DEFAULT 'pending',  -- pending/sending/sent/failed/canceled
-  attempts INTEGER NOT NULL DEFAULT 0, retry_key TEXT, sent_at TEXT, updated_at TEXT, claim_token TEXT)
+  attempts INTEGER NOT NULL DEFAULT 0, retry_key TEXT, retry_started_at TEXT, sent_at TEXT, updated_at TEXT, claim_token TEXT)
   INDEX (status, remind_at)
 processed_events(event_id TEXT PRIMARY KEY NOT NULL, operation_key TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))
 - claim_token は各claimの識別子。成功・失敗の更新は現在のclaimとの一致を条件にし、復旧・取消・完了時にクリアする。retry_keyとは別用途
+- retry_started_atは初回claimのUTC時刻。retry_keyとともに再claimで変更せず、LINEの24時間管理期間を超える再送を防ぐ
 - 複数品目の登録・削除は db.batch() で原子的に
 - マイグレーションは migrations/ で管理し、テスト起動時に自動適用
 

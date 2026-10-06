@@ -24,6 +24,7 @@ export const MESSAGES = Object.freeze({
 });
 
 export const REPLY_TEXT = Object.freeze({
+  pushPrefix: "⏰ リマインド: ",
   added: (names: readonly string[]) => `追加: ${names.join("、")}`,
   registered: (names: readonly string[]) => `登録済み: ${names.join("、")}`,
   removed: (names: readonly string[]) => `削除: ${names.join("、")}`,

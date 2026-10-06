@@ -49,3 +49,4 @@ export const REMINDER_STALE_AFTER_MS = 5 * MILLISECONDS_PER_MINUTE;
 
 // 公式「テキストメッセージ」: UTF-16符号単位で数える最大文字数。
 export const MAX_REPLY_TEXT_LENGTH = 5000;
+export const PUSH_TIMEOUT_MS = 10_000;
