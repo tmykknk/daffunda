@@ -55,11 +55,13 @@ export async function sendDueReminders(
   options: ScheduledOptions,
 ): Promise<void> {
   const token = bindings.LINE_CHANNEL_ACCESS_TOKEN;
-  if (!configured(token)) return;
+  const group = bindings.ALLOWED_GROUP_ID;
+  if (!configured(token) || !configured(group) || !group.startsWith("C"))
+    return;
   const repo = createRemindersRepo(bindings.DB);
   const now = options.now();
-  await repo.recoverStale(now);
-  const claimed = await repo.claimDue(now);
+  await repo.recoverStale(now, group);
+  const claimed = await repo.claimDue(now, group);
   for (const reminder of claimed)
     await processClaim(reminder, repo, token, options);
 }

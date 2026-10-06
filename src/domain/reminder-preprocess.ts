@@ -61,6 +61,20 @@ export function hasUnsupportedRelativeCount(text: string): boolean {
   );
 }
 
+export function hasInvalidNumericDate(text: string): boolean {
+  return [...text.matchAll(/\d+(?:\/\d+)+/gu)].some((match) => {
+    const fields = match[0].split("/");
+    if (fields.slice(-2).some((field) => !/^\d{1,2}$/u.test(field)))
+      return true;
+    const parts = fields.map(Number);
+    if (parts.length !== 2 && parts.length !== 3) return true;
+    const [year, month, day] = parts.length === 2 ? [2000, ...parts] : parts;
+    if (year === undefined || month === undefined || day === undefined)
+      return true;
+    return !Number.isFinite(createCalendarDate(year, month - 1, day).getTime());
+  });
+}
+
 function replaceRelativeTimes(text: string, now: Date): string {
   return text.replace(
     /(\d+)(分|時間)後/gu,

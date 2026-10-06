@@ -20,11 +20,16 @@ type NewReminder = Readonly<{
   now: Date;
 }>;
 
-function prepareReminderClaim(db: D1Database, id: number, timestamp: string) {
+function prepareReminderClaim(
+  db: D1Database,
+  id: number,
+  timestamp: string,
+  group: string,
+) {
   // 各行に独立したUUIDをbindし、同時Cronでもpendingを取れたバッチだけが所有する。
   return db
     .prepare(
-      "UPDATE reminders SET status = 'sending', updated_at = ?, claim_token = ?, retry_key = COALESCE(retry_key, ?), retry_started_at = COALESCE(retry_started_at, ?) WHERE id = ? AND status = 'pending' AND remind_at <= ? RETURNING *",
+      "UPDATE reminders SET status = 'sending', updated_at = ?, claim_token = ?, retry_key = COALESCE(retry_key, ?), retry_started_at = COALESCE(retry_started_at, ?) WHERE id = ? AND status = 'pending' AND remind_at <= ? AND group_id = ? RETURNING *",
     )
     .bind(
       timestamp,
@@ -33,6 +38,7 @@ function prepareReminderClaim(db: D1Database, id: number, timestamp: string) {
       timestamp,
       id,
       timestamp,
+      group,
     );
 }
 
@@ -73,18 +79,18 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
       const results = await executeStatements(db, [result], scope);
       return results[0]?.meta.changes === 1;
     },
-    async claimDue(now: Date) {
+    async claimDue(now: Date, group: string) {
       const timestamp = utcTimestamp(now);
       const candidates = await db
         .prepare(
-          "SELECT * FROM reminders WHERE status = 'pending' AND remind_at <= ? ORDER BY remind_at, id",
+          "SELECT * FROM reminders WHERE status = 'pending' AND remind_at <= ? AND group_id = ? ORDER BY remind_at, id",
         )
-        .bind(timestamp)
+        .bind(timestamp, group)
         .all();
       const rows = parseRows(reminderSchema, candidates.results);
       if (!rows.length) return [];
       const results = await db.batch(
-        rows.map((row) => prepareReminderClaim(db, row.id, timestamp)),
+        rows.map((row) => prepareReminderClaim(db, row.id, timestamp, group)),
       );
       return parseRows(
         claimedSchema,
@@ -114,16 +120,16 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
         .run();
       return result.meta.changes === 1;
     },
-    async recoverStale(now: Date) {
+    async recoverStale(now: Date, group: string) {
       const timestamp = utcTimestamp(now);
       const cutoff = utcTimestamp(
         new Date(now.getTime() - REMINDER_STALE_AFTER_MS),
       );
       const result = await db
         .prepare(
-          "UPDATE reminders SET status = 'pending', updated_at = ?, claim_token = NULL WHERE status = 'sending' AND updated_at < ?",
+          "UPDATE reminders SET status = 'pending', updated_at = ?, claim_token = NULL WHERE status = 'sending' AND updated_at < ? AND group_id = ?",
         )
-        .bind(timestamp, cutoff)
+        .bind(timestamp, cutoff, group)
         .run();
       return result.meta.changes;
     },

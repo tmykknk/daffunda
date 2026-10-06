@@ -166,7 +166,7 @@ test("取消は自グループの未送信だけに適用し、取消済みは�
   expect(await reminders().cancel(group, row.id, now)).toBe(false);
   expect(await reminders().cancel(group, 999, now)).toBe(false);
   expect(await reminders().listUnsent(group)).toEqual([]);
-  expect(await reminders().claimDue(now)).toEqual([]);
+  expect(await reminders().claimDue(now, group)).toEqual([]);
 });
 
 test("同時claimは期限到来のpendingを一度だけ取得し、未来と取消を除外する", async () => {
@@ -175,7 +175,10 @@ test("同時claimは期限到来のpendingを一度だけ取得し、未来と�
   const canceled = await register("取消");
   await reminders().cancel(group, canceled.id, now);
   const claims = (
-    await Promise.all([reminders().claimDue(now), reminders().claimDue(now)])
+    await Promise.all([
+      reminders().claimDue(now, group),
+      reminders().claimDue(now, group),
+    ])
   ).flat();
   expect(claims).toHaveLength(1);
   expect(claims[0]).toMatchObject({
@@ -183,34 +186,37 @@ test("同時claimは期限到来のpendingを一度だけ取得し、未来と�
     status: "sending",
     updated_at: now.toISOString(),
   });
-  expect(await reminders().claimDue(now)).toEqual([]);
+  expect(await reminders().claimDue(now, group)).toEqual([]);
 });
 
 test("5分ちょうどは復旧せず、5分超のsendingだけをpendingへ戻す", async () => {
   await register();
-  const claimed = await reminders().claimDue(now);
+  const claimed = await reminders().claimDue(now, group);
   expect(
-    await reminders().recoverStale(new Date(now.getTime() + 300_000)),
+    await reminders().recoverStale(new Date(now.getTime() + 300_000), group),
   ).toBe(0);
   expect(
-    await reminders().recoverStale(new Date(now.getTime() + 300_001)),
+    await reminders().recoverStale(new Date(now.getTime() + 300_001), group),
   ).toBe(1);
-  const next = await reminders().claimDue(new Date(now.getTime() + 300_001));
+  const next = await reminders().claimDue(
+    new Date(now.getTime() + 300_001),
+    group,
+  );
   expect(next[0]?.id).toBe(claimed[0]?.id);
   expect(next[0]?.attempts).toBe(0);
   expect(
-    await reminders().recoverStale(new Date(now.getTime() + 300_002)),
+    await reminders().recoverStale(new Date(now.getTime() + 300_002), group),
   ).toBe(0);
 });
 
 test("成功はsentになり、重複完了・送信済み取消・再claimは無変更", async () => {
   await register();
-  const [claimed] = await reminders().claimDue(now);
+  const [claimed] = await reminders().claimDue(now, group);
   if (!claimed) throw new Error("claimが空です");
   expect(await reminders().markSent(claimed, now)).toBe(true);
   expect(await reminders().markSent(claimed, now)).toBe(false);
   expect(await reminders().cancel(group, claimed.id, now)).toBe(false);
-  expect(await reminders().claimDue(now)).toEqual([]);
+  expect(await reminders().claimDue(now, group)).toEqual([]);
   expect(await reminders().listUnsent(group)).toEqual([]);
   const row = await env.DB.prepare(
     "SELECT status, sent_at FROM reminders WHERE id = ?",
@@ -223,7 +229,7 @@ test("成功はsentになり、重複完了・送信済み取消・再claimは�
 test("失敗は1回ずつ加算し、3回でfailedになって再claimしない", async () => {
   await register();
   for (const attempt of [1, 2, 3]) {
-    const [claimed] = await reminders().claimDue(now);
+    const [claimed] = await reminders().claimDue(now, group);
     if (!claimed) throw new Error("claimが空です");
     expect(await reminders().markFailed(claimed, now)).toBe(true);
     expect(await reminders().markFailed(claimed, now)).toBe(false);
@@ -233,7 +239,7 @@ test("失敗は1回ずつ加算し、3回でfailedになって再claimしない"
       status: attempt === 3 ? "failed" : "pending",
     });
   }
-  expect(await reminders().claimDue(now)).toEqual([]);
+  expect(await reminders().claimDue(now, group)).toEqual([]);
   const [failed] = await reminders().listUnsent(group);
   if (!failed) throw new Error("failedが空です");
   expect(await reminders().cancel(group, failed.id, now)).toBe(true);
@@ -241,11 +247,11 @@ test("失敗は1回ずつ加算し、3回でfailedになって再claimしない"
 
 test("復旧・再claim後の古い処理は新しいclaimを上書きしない", async () => {
   await register();
-  const [old] = await reminders().claimDue(now);
+  const [old] = await reminders().claimDue(now, group);
   if (!old) throw new Error("claimが空です");
   const later = new Date(now.getTime() + 300_001);
-  await reminders().recoverStale(later);
-  const [current] = await reminders().claimDue(later);
+  await reminders().recoverStale(later, group);
+  const [current] = await reminders().claimDue(later, group);
   if (!current) throw new Error("claimが空です");
   expect(await reminders().markSent(old, later)).toBe(false);
   expect(await reminders().markFailed(old, later)).toBe(false);
@@ -254,7 +260,7 @@ test("復旧・再claim後の古い処理は新しいclaimを上書きしない"
 
 test("sendingの取消後に遅れて成功・失敗が届いても取消を維持する", async () => {
   await register();
-  const [claimed] = await reminders().claimDue(now);
+  const [claimed] = await reminders().claimDue(now, group);
   if (!claimed) throw new Error("claimが空です");
   expect(await reminders().cancel(group, claimed.id, now)).toBe(true);
   expect(await reminders().markSent(claimed, now)).toBe(false);
@@ -283,10 +289,10 @@ test("不正な入力時刻はDBを変更せず拒否する", async () => {
 
 test("同時刻の再claimでも前の処理を拒否する", async () => {
   await register();
-  const [old] = await reminders().claimDue(now);
+  const [old] = await reminders().claimDue(now, group);
   if (!old) throw new Error("claimが空です");
   await reminders().markFailed(old, now);
-  const [current] = await reminders().claimDue(now);
+  const [current] = await reminders().claimDue(now, group);
   if (!current) throw new Error("claimが空です");
   expect(await reminders().markSent(old, now)).toBe(false);
   expect(await reminders().markFailed(old, now)).toBe(false);
@@ -741,6 +747,7 @@ const push = vi.fn<Parameters<typeof sendDueReminders>[1]["push"]>(
   async () => {},
 );
 const cronBindings = {
+  ALLOWED_GROUP_ID: group,
   DB: env.DB,
   LINE_CHANNEL_ACCESS_TOKEN: "test-access-token",
 };
@@ -757,7 +764,10 @@ test("Cronは同時起動でも期限到来分を一度だけ送り、未来・�
   const canceled = await register("取消");
   await reminders().cancel(group, canceled.id, now);
   await Promise.all([runCron(), runCron()]);
-  expect(push).toHaveBeenCalledTimes(2);
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(await reminders().listUnsent(otherGroup)).toMatchObject([
+    { status: "pending", retry_key: null, retry_started_at: null },
+  ]);
   const calls = push.mock.calls;
   expect(calls).toEqual(
     expect.arrayContaining([
@@ -767,24 +777,17 @@ test("Cronは同時起動でも期限到来分を一度だけ送り、未来・�
         "⏰ リマインド: テスト",
         expect.stringMatching(/^[0-9a-f-]{36}$/),
       ],
-      [
-        "test-access-token",
-        otherGroup,
-        "⏰ リマインド: 別グループ",
-        expect.stringMatching(/^[0-9a-f-]{36}$/),
-      ],
     ]),
   );
-  expect(new Set(calls.map((call) => call[3])).size).toBe(2);
+  expect(new Set(calls.map((call) => call[3])).size).toBe(1);
   await runCron();
-  expect(push).toHaveBeenCalledTimes(2);
+  expect(push).toHaveBeenCalledTimes(1);
   const rows = await env.DB.prepare(
     "SELECT status, attempts, sent_at FROM reminders WHERE status = ?",
   )
     .bind("sent")
     .all();
   expect(rows.results).toEqual([
-    { status: "sent", attempts: 0, sent_at: now.toISOString() },
     { status: "sent", attempts: 0, sent_at: now.toISOString() },
   ]);
 });
@@ -798,6 +801,7 @@ test("送信対象がないCronはAPIもログも呼ばず、token欠落・仮�
     await sendDueReminders(
       {
         DB: env.DB,
+        ALLOWED_GROUP_ID: group,
         ...(token === undefined ? {} : { LINE_CHANNEL_ACCESS_TOKEN: token }),
       },
       cronOptions(),
@@ -857,7 +861,7 @@ test("1件のPush失敗でも後続を送り、次回成功ではattemptsを維�
 
 test("sendingは5分超で復旧し、キーを維持して送り、古いclaimは完了できない", async () => {
   await register();
-  const [old] = await reminders().claimDue(now);
+  const [old] = await reminders().claimDue(now, group);
   if (!old) throw new Error("claimが空です");
   await runCron(new Date(now.getTime() + 300_000));
   expect(push).not.toHaveBeenCalled();
@@ -1000,4 +1004,180 @@ test("claimバッチの途中失敗でも前の行の状態・キー・開始時
   await env.DB.exec("DROP TRIGGER test_claim_failure");
   await runCron();
   expect(push).toHaveBeenCalledTimes(2);
+});
+
+test("不正な月の登録は拒否し、再送でも業務データを作らない", async () => {
+  const event = textEvent("/テスト 13/5", "test-invalid-month");
+  expect((await postEvents([event])).status).toBe(200);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  expect((await postEvents([event])).status).toBe(200);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  expect(lineReply).toHaveBeenCalledTimes(1);
+});
+
+test("登録失敗はイベント記録も戻し、同時再送では1件だけ登録する", async () => {
+  await env.DB.exec(
+    "CREATE TRIGGER test_register_failure BEFORE INSERT ON reminders BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+  );
+  const event = textEvent("/テスト 明日", "test-register-rollback");
+  expect((await postEvents([event])).status).toBe(500);
+  expect(await events().get("test-register-rollback")).toBeNull();
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  await env.DB.exec("DROP TRIGGER test_register_failure");
+  const responses = await Promise.all([
+    postEvents([event]),
+    postEvents([event]),
+  ]);
+  expect(responses.map((response) => response.status)).toEqual([200, 200]);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(lineReply).toHaveBeenCalledTimes(1);
+});
+
+test("取消で一覧が空になっても内部IDを再利用せず古いIDは無効", async () => {
+  const old = await register();
+  if (!old) throw new Error("登録失敗");
+  expect(await reminders().cancel(group, old.id, now)).toBe(true);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+  const current = await register();
+  if (!current) throw new Error("登録失敗");
+  expect(current.id).toBeGreaterThan(old.id);
+  expect(await reminders().cancel(group, old.id, now)).toBe(false);
+  expect(await reminders().cancel(otherGroup, current.id, now)).toBe(false);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+});
+
+test("滞留復旧中に旧Pushが完了しても新claimを上書きしない", async () => {
+  // 公式「APIリクエストを再試行する」: 復旧時も同じX-Line-Retry-Key。
+  await register();
+  let started = () => {};
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let complete = () => {};
+  const pending = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  push.mockImplementationOnce(async () => {
+    started();
+    await pending;
+  });
+  const oldRun = runCron();
+  await entered;
+  await runCron(new Date(now.getTime() + 300_001));
+  complete();
+  await oldRun;
+  expect(push).toHaveBeenCalledTimes(2);
+  expect(push.mock.calls[0]).toEqual(push.mock.calls[1]);
+  const result = await env.DB.prepare(
+    "SELECT status, attempts FROM reminders",
+  ).all();
+  expect(result.results).toEqual([{ status: "sent", attempts: 0 }]);
+});
+
+test("初期スキーマからの更新は既存予定と処理済みイベントを保持する", async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS.slice(0, 1));
+  await env.DB.prepare(
+    "INSERT INTO reminders (group_id, content, remind_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+  )
+    .bind(
+      group,
+      "移行テスト",
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    )
+    .run();
+  await events().record("test-legacy-event", now);
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+  expect(
+    await env.DB.prepare(
+      "SELECT event_id, operation_key FROM processed_events WHERE event_id = ?",
+    )
+      .bind("test-legacy-event")
+      .first(),
+  ).toEqual({ event_id: "test-legacy-event", operation_key: null });
+  expect(await reminders().listUnsent(group)).toMatchObject([
+    {
+      content: "移行テスト",
+      status: "pending",
+      attempts: 0,
+      retry_started_at: null,
+    },
+  ]);
+  expect(
+    (await postEvents([textEvent("/テスト 明日", "test-legacy-event")])).status,
+  ).toBe(200);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(lineReply).not.toHaveBeenCalled();
+  await runCron();
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test.each([undefined, "", " ", "<ALLOWED_GROUP_ID>", "unset", "U_test_user_1"])(
+  "Cronは許可グループが不正ならDBも送信も無操作: %s",
+  async (allowed) => {
+    await register();
+    await reminders().claimDue(now, group);
+    await register("未claimの予定");
+    const before = await env.DB.prepare("SELECT * FROM reminders").all();
+    await sendDueReminders(
+      {
+        DB: env.DB,
+        LINE_CHANNEL_ACCESS_TOKEN: cronBindings.LINE_CHANNEL_ACCESS_TOKEN,
+        ...(allowed === undefined ? {} : { ALLOWED_GROUP_ID: allowed }),
+      },
+      cronOptions(new Date(now.getTime() + 300_001)),
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(
+      (await env.DB.prepare("SELECT * FROM reminders").all()).results,
+    ).toEqual(before.results);
+  },
+);
+
+test("許可変更中は旧予定を保持し、再許可で同じ宛先・本文・キーを復旧送信する", async () => {
+  // 公式「プッシュメッセージを送る」「APIリクエストを再試行する」: 宛先とキーを維持。
+  await register("旧グループの予定");
+  const [old] = await reminders().claimDue(now, group);
+  if (!old) throw new Error("claim失敗");
+  await register("新グループの予定", now, otherGroup);
+  const oldRows = await reminders().listUnsent(group);
+  const later = new Date(now.getTime() + 300_001);
+  const changed = { ...cronBindings, ALLOWED_GROUP_ID: otherGroup };
+  await Promise.all([
+    sendDueReminders(changed, cronOptions(later)),
+    sendDueReminders(changed, cronOptions(later)),
+  ]);
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(push.mock.calls[0]?.[1]).toBe(otherGroup);
+  expect(await reminders().listUnsent(group)).toEqual(oldRows);
+  await Promise.all([runCron(later), runCron(later)]);
+  expect(push).toHaveBeenCalledTimes(2);
+  expect(push.mock.calls[1]).toEqual([
+    "test-access-token",
+    group,
+    "⏰ リマインド: 旧グループの予定",
+    old.retry_key,
+  ]);
+  expect(await reminders().markSent(old, later)).toBe(false);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("Push失敗後に許可が変わっても再許可時の宛先・本文・キーは同一", async () => {
+  await register("再送の予定");
+  push.mockRejectedValueOnce(new Error("test failure"));
+  await runCron();
+  const saved = await reminders().listUnsent(group);
+  await sendDueReminders(
+    { ...cronBindings, ALLOWED_GROUP_ID: otherGroup },
+    cronOptions(new Date(now.getTime() + 60_000)),
+  );
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(await reminders().listUnsent(group)).toEqual(saved);
+  await runCron(new Date(now.getTime() + 120_000));
+  expect(push).toHaveBeenCalledTimes(2);
+  expect(push.mock.calls[1]).toEqual(push.mock.calls[0]);
+  expect(await reminders().listUnsent(group)).toEqual([]);
 });
