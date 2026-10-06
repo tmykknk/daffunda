@@ -4,7 +4,8 @@
 LINE Messaging API → Cloudflare Workers (Hono, TypeScript strict) → D1
 リマインダー送信: Workers Cron Trigger（毎分、crons = ["* * * * *"]）
 OSSとして公開する前提。環境固有の値は一切リポジトリに含めない。
-Webhook: `POST /webhook`（他のパスは 404）
+Webhook: `POST /webhook`。例外として `GET /health` は固定の疎通確認文「準備完了」を200で返す。
+秘密情報・DB内容は返さずDBへアクセスしない。他のパスは404。
 
 ## 共通ルール
 - 受信テキストは NFKC 正規化 → trim してから解釈（＋→+、－→-、／→/、全角スペース→半角、全角数字→半角）
@@ -37,7 +38,12 @@ Webhook: `POST /webhook`（他のパスは 404）
 - 繰り返し（毎週・毎日など）は扱わない。「毎週月曜」のような入力は、解釈できた日時の単発として登録される（既知の挙動。decisions D-15）
 
 ## 送信（Cron）
-- 毎分: status='pending' AND remind_at <= now を原子的に 'sending' へ更新して取得（UPDATE ... RETURNING）
+- ALLOWED_GROUP_IDが未設定・空・仮値（unsetやプレースホルダー等）ならDBを変更せず送信しない。
+  設定済みなら一致するgroup_idの予定だけをclaim・送信・滞留復旧の対象とする。
+  許可外の予定は削除・取消・宛先変更せず、その状態のまま保持する。
+  そのグループを再び許可すると保持された予定が送信対象になり得る（再試行期限の制約は維持）。
+  許可IDを変更する前に、旧グループの不要な予定を事前に取り消す。
+- 毎分: group_id=ALLOWED_GROUP_ID AND status='pending' AND remind_at <= now を原子的に 'sending' へ更新して取得（UPDATE ... RETURNING）
 - 送信対象がない回は何もせず、ログも出さない
 - Push 成功 → 'sent'。失敗 → attempts+1 で 'pending' に戻し、3回失敗で 'failed'（失敗理由をログ。429 は特に明記）
 - 'sending' のまま5分超のものは 'pending' に戻す（クラッシュ対策。at-least-once を許容）
