@@ -1,10 +1,14 @@
 import { applyD1Migrations, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { createApp } from "../src/index";
 import { createItemsRepo } from "../src/repo/items";
 import { createEventsRepo } from "../src/repo/processed-events";
 import { createRemindersRepo } from "../src/repo/reminders";
 import { handleText } from "../src/service/commands";
+import type { WebhookBindings } from "../src/service/webhook";
+
+import { WEBHOOK_SIGNATURE } from "./fixtures/webhook-signature";
 
 const group = "C_test_group_1";
 const otherGroup = "C_test_group_2";
@@ -401,4 +405,332 @@ test("serviceのリマインダー一覧は期限順で他グループを表示�
   expect(await reply("リマインド")).toBe(
     "#2 10/4(日) 09:00 先のテスト\n#1 10/5(月) 09:00 後のテスト",
   );
+});
+
+const testSecret = "test-channel-secret";
+const lineReply = vi.fn(
+  async (_token: string, _replyToken: string, _text: string) => {},
+);
+const webhookApp = () => createApp({ reply: lineReply, now: () => now });
+const bindings = () => ({
+  DB: env.DB,
+  LINE_CHANNEL_SECRET: testSecret,
+  LINE_CHANNEL_ACCESS_TOKEN: "test-access-token",
+  ALLOWED_GROUP_ID: group,
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  lineReply.mockClear();
+});
+
+function textEvent(text: string, eventId = "test-webhook-1") {
+  return {
+    type: "message",
+    mode: "active",
+    timestamp: now.getTime(),
+    webhookEventId: eventId,
+    deliveryContext: { isRedelivery: false },
+    source: { type: "group", groupId: group, userId: user },
+    replyToken: "test-reply-token",
+    message: { type: "text", id: "test-message-1", text },
+  };
+}
+async function signature(body: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(testSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const digest = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(body),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(digest)));
+}
+async function postEvents(
+  events: readonly unknown[],
+  settings: WebhookBindings = bindings(),
+) {
+  const body = JSON.stringify({ destination: "U_test_bot_1", events });
+  return webhookApp().fetch(
+    new Request("https://example.test/webhook", {
+      method: "POST",
+      body,
+      headers: { "X-Line-Signature": await signature(body) },
+    }),
+    settings,
+  );
+}
+
+test("Webhookは署名不正・欠落・本文改変を401にしてDBに触れない", async () => {
+  const body = JSON.stringify({ events: [textEvent("+テスト品目")] });
+  for (const value of ["", "invalid", await signature(`${body} `)]) {
+    const response = await webhookApp().fetch(
+      new Request("https://example.test/webhook", {
+        method: "POST",
+        body,
+        headers: { "x-line-signature": value },
+      }),
+      bindings(),
+    );
+    expect(response.status).toBe(401);
+  }
+  expect(await items().list(group)).toEqual([]);
+  expect(await events().get("test-webhook-1")).toBeNull();
+  expect(lineReply).not.toHaveBeenCalled();
+});
+// 公式「リクエストボディ」「レスポンス」: eventsの空配列にも200。
+test("空eventsと未設定・仮値・別groupは200で無変更、拒否ログはtypeとIDだけ", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  expect((await postEvents([])).status).toBe(200);
+  for (const allowed of ["", "<YOUR_ALLOWED_GROUP_ID>", otherGroup])
+    expect(
+      (
+        await postEvents([textEvent("+秘密のテスト本文")], {
+          ...bindings(),
+          ALLOWED_GROUP_ID: allowed,
+        })
+      ).status,
+    ).toBe(200);
+  expect(log).toHaveBeenCalledTimes(3);
+  for (const call of log.mock.calls)
+    expect(JSON.parse(String(call[0]))).toEqual({
+      type: "group",
+      groupId: group,
+      userId: user,
+    });
+  expect(await items().list(group)).toEqual([]);
+  expect(await events().get("test-webhook-1")).toBeNull();
+  expect(lineReply).not.toHaveBeenCalled();
+});
+test("許可groupのテキストは保存し、同時再送でも登録と返信は1回", async () => {
+  const event = textEvent("/テスト 明日15時");
+  const responses = await Promise.all([
+    postEvents([event]),
+    postEvents([{ ...event, deliveryContext: { isRedelivery: true } }]),
+  ]);
+  expect(responses.map((r) => r.status)).toEqual([200, 200]);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(lineReply).toHaveBeenCalledExactlyOnceWith(
+    "test-access-token",
+    "test-reply-token",
+    "登録 #1: テスト → 10/4(日) 15:00\n取消: リマインド削除 1",
+  );
+});
+test("イベント記録後の業務SQL失敗は全体を戻し、再送で欠落なく処理できる", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await env.DB.exec(
+    "CREATE TRIGGER fail_business BEFORE INSERT ON items WHEN NEW.name = 'テスト品目2' BEGIN SELECT RAISE(ABORT, 'TEST_FAILURE'); END;",
+  );
+  const event = textEvent("+テスト品目1 テスト品目2");
+  expect((await postEvents([event])).status).toBe(500);
+  expect(await items().list(group)).toEqual([]);
+  expect(await events().get(event.webhookEventId)).toBeNull();
+  expect(lineReply).not.toHaveBeenCalled();
+  await env.DB.exec("DROP TRIGGER fail_business");
+  expect((await postEvents([event])).status).toBe(200);
+  expect(await items().list(group)).toHaveLength(2);
+  expect(await events().get(event.webhookEventId)).not.toBeNull();
+});
+test("削除の同時再送は古い1件だけを完了する", async () => {
+  await items().add(group, ["ミルク"], user, now);
+  await env.DB.prepare(
+    "INSERT INTO items (group_id, name, norm_name, created_at) VALUES (?, ?, ?, ?)",
+  )
+    .bind(group, "みるく", "ミルク", now.toISOString())
+    .run();
+  const event = textEvent("-みるく");
+  expect(
+    (await Promise.all([postEvents([event]), postEvents([event])])).map(
+      (r) => r.status,
+    ),
+  ).toEqual([200, 200]);
+  expect(await items().list(group)).toHaveLength(1);
+  expect(lineReply).toHaveBeenCalledTimes(1);
+});
+test("非テキスト・雑談・standby・応答トークン欠落・ユーザー/roomは無変更", async () => {
+  vi.spyOn(console, "info").mockImplementation(() => {});
+  const base = textEvent("+テスト品目");
+  const ignored = [
+    { ...base, message: { type: "sticker" } },
+    textEvent("雑談"),
+    { ...base, mode: "standby" },
+    { ...base, replyToken: undefined },
+    { ...base, source: { type: "user", userId: user } },
+    {
+      ...base,
+      source: { type: "room", roomId: "R_test_room_1", userId: user },
+    },
+  ];
+  expect((await postEvents(ignored)).status).toBe(200);
+  expect(await items().list(group)).toEqual([]);
+  expect(await events().get(base.webhookEventId)).toBeNull();
+  expect(lineReply).not.toHaveBeenCalled();
+});
+test("Webhookは複数イベントを順に処理し、再送でも一覧・取消・静的返信を重複しない", async () => {
+  const input = [
+    textEvent("+テスト品目", "test-event-a"),
+    textEvent("リスト", "test-event-b"),
+    textEvent("ヘルプ", "test-event-c"),
+    textEvent("/テスト 明日", "test-event-d"),
+    textEvent("リマインド", "test-event-e"),
+    textEvent("リマインド削除 1", "test-event-f"),
+  ];
+  expect((await postEvents(input)).status).toBe(200);
+  expect(lineReply).toHaveBeenCalledTimes(6);
+  expect((await postEvents(input)).status).toBe(200);
+  expect(lineReply).toHaveBeenCalledTimes(6);
+  expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test("署名済みの生bodyをそのまま検証し、不正JSON/スキーマは400", async () => {
+  const bodies = ["{", "{}", '{"events":"invalid"}'];
+  for (const body of bodies) {
+    const response = await webhookApp().fetch(
+      new Request("https://example.test/webhook", {
+        method: "POST",
+        body,
+        headers: { "X-LINE-SIGNATURE": await signature(body) },
+      }),
+      bindings(),
+    );
+    expect(response.status).toBe(400);
+  }
+  const body = `  ${JSON.stringify({ events: [textEvent("＋テスト品目")] })}\n`;
+  expect(
+    (
+      await webhookApp().fetch(
+        new Request("https://example.test/webhook", {
+          method: "POST",
+          body,
+          headers: { "X-LINE-SIGNATURE": await signature(body) },
+        }),
+        bindings(),
+      )
+    ).status,
+  ).toBe(200);
+  expect(await items().list(group)).toHaveLength(1);
+});
+test("未設定secretは401、未設定access tokenは500でDB無変更", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  expect(
+    (
+      await postEvents([textEvent("+テスト品目")], {
+        ...bindings(),
+        LINE_CHANNEL_SECRET: "",
+      })
+    ).status,
+  ).toBe(401);
+  expect(
+    (
+      await postEvents([textEvent("+テスト品目")], {
+        ...bindings(),
+        LINE_CHANNEL_ACCESS_TOKEN: "",
+      })
+    ).status,
+  ).toBe(500);
+  expect(await items().list(group)).toEqual([]);
+  expect(await events().get("test-webhook-1")).toBeNull();
+});
+test("Reply失敗でも業務更新を再実行せず、ログは固定コードのみ", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  lineReply.mockRejectedValueOnce(new Error("test-tokenと秘密の本文"));
+  const event = textEvent("/テスト 明日15時");
+  expect((await postEvents([event])).status).toBe(500);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(log).toHaveBeenCalledExactlyOnceWith('{"code":"INTERNAL_ERROR"}');
+  expect((await postEvents([event])).status).toBe(200);
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+  expect(lineReply).toHaveBeenCalledTimes(1);
+});
+
+test("group設定自体の欠落とsource欠落も200で無変更", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  const settings = {
+    DB: env.DB,
+    LINE_CHANNEL_SECRET: testSecret,
+    LINE_CHANNEL_ACCESS_TOKEN: "test-access-token",
+  };
+  expect((await postEvents([textEvent("+テスト品目")], settings)).status).toBe(
+    200,
+  );
+  expect((await postEvents([{ type: "join" }])).status).toBe(200);
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    JSON.stringify({ type: "group", groupId: group, userId: user }),
+  );
+  expect(await events().get("test-webhook-1")).toBeNull();
+});
+test("本番配線でもReply fetchをモックし、userId欠落と未知の属性を扱う", async () => {
+  const fetcher = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response("{}"));
+  const event = {
+    ...textEvent("+テスト品目"),
+    source: { type: "group", groupId: group },
+    extra: "test-unused-field",
+  };
+  const body = JSON.stringify({ events: [event] });
+  expect(
+    (
+      await createApp().fetch(
+        new Request("https://example.test/webhook", {
+          method: "POST",
+          body,
+          headers: { "x-line-signature": await signature(body) },
+        }),
+        bindings(),
+      )
+    ).status,
+  ).toBe(200);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect((await items().list(group))[0]?.added_by).toBeNull();
+});
+
+test("複数イベントの途中失敗後は成功済みを飛ばし、失敗イベントだけ再処理する", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await env.DB.exec(
+    "CREATE TRIGGER fail_later BEFORE INSERT ON items WHEN NEW.name = '後のテスト' BEGIN SELECT RAISE(ABORT, 'TEST_FAILURE'); END;",
+  );
+  const input = [
+    textEvent("+先のテスト", "test-event-first"),
+    textEvent("+後のテスト", "test-event-later"),
+  ];
+  expect((await postEvents(input)).status).toBe(500);
+  expect(await items().list(group)).toHaveLength(1);
+  expect(await events().get("test-event-first")).not.toBeNull();
+  expect(await events().get("test-event-later")).toBeNull();
+  await env.DB.exec("DROP TRIGGER fail_later");
+  expect((await postEvents(input)).status).toBe(200);
+  expect(await items().list(group)).toHaveLength(2);
+  expect(lineReply).toHaveBeenCalledTimes(2);
+});
+
+// 公式「Webhookの署名を検証する」: 独立したopenssl固定ペアで生bodyと署名を照合する。
+test("openssl固定署名: 正しいbodyは200、改変・空白追加・ヘッダー欠落は401", async () => {
+  const fixed = WEBHOOK_SIGNATURE;
+  for (const input of [
+    { body: fixed.body, signature: fixed.signature, expected: 200 },
+    { body: `${fixed.body} `, signature: fixed.signature, expected: 401 },
+    {
+      body: fixed.body.replace("U_test_destination", "U_test_changed"),
+      signature: fixed.signature,
+      expected: 401,
+    },
+    { body: fixed.body, signature: "", expected: 401 },
+  ]) {
+    const response = await webhookApp().fetch(
+      new Request("https://example.test/webhook", {
+        method: "POST",
+        body: input.body,
+        headers: input.signature ? { "x-line-signature": input.signature } : {},
+      }),
+      { ...bindings(), LINE_CHANNEL_SECRET: fixed.secret },
+    );
+    expect(response.status).toBe(input.expected);
+  }
+  expect(lineReply).not.toHaveBeenCalled();
+  expect(await items().list(group)).toEqual([]);
 });

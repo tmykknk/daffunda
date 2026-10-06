@@ -1,6 +1,12 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type * as v from "valibot";
 import { MAX_REMINDER_ATTEMPTS, REMINDER_STALE_AFTER_MS } from "../constants";
+import {
+  type EventScope,
+  executeRows,
+  executeStatements,
+  scopeBindings,
+} from "./event-operation";
 import { firstRow, parseRows, utcTimestamp } from "./rows";
 import { claimedSchema, reminderSchema } from "./schemas";
 
@@ -14,13 +20,13 @@ type NewReminder = Readonly<{
   now: Date;
 }>;
 
-export function createRemindersRepo(db: D1Database) {
+export function createRemindersRepo(db: D1Database, scope?: EventScope) {
   return {
     async create(input: NewReminder) {
       const timestamp = utcTimestamp(input.now);
       const result = await db
         .prepare(
-          "INSERT INTO reminders (group_id, content, remind_at, created_by, created_at, retry_key, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *",
+          "INSERT INTO reminders (group_id, content, remind_at, created_by, created_at, retry_key, updated_at) SELECT ?, ?, ?, ?, ?, ?, ? WHERE (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?)) RETURNING *",
         )
         .bind(
           input.groupId,
@@ -30,27 +36,26 @@ export function createRemindersRepo(db: D1Database) {
           timestamp,
           input.retryKey,
           timestamp,
-        )
-        .all();
-      return firstRow(parseRows(reminderSchema, result.results));
+          ...scopeBindings(scope),
+        );
+      return firstRow(await executeRows(db, result, reminderSchema, scope));
     },
     async listUnsent(group: string) {
       const result = await db
         .prepare(
-          "SELECT * FROM reminders WHERE group_id = ? AND status IN ('pending', 'sending', 'failed') ORDER BY remind_at, id",
+          "SELECT * FROM reminders WHERE group_id = ? AND status IN ('pending', 'sending', 'failed') AND (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?)) ORDER BY remind_at, id",
         )
-        .bind(group)
-        .all();
-      return parseRows(reminderSchema, result.results);
+        .bind(group, ...scopeBindings(scope));
+      return executeRows(db, result, reminderSchema, scope);
     },
     async cancel(group: string, id: number, now: Date) {
       const result = await db
         .prepare(
-          "UPDATE reminders SET status = 'canceled', updated_at = ?, claim_token = NULL WHERE group_id = ? AND id = ? AND status IN ('pending', 'sending', 'failed')",
+          "UPDATE reminders SET status = 'canceled', updated_at = ?, claim_token = NULL WHERE group_id = ? AND id = ? AND status IN ('pending', 'sending', 'failed') AND (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?))",
         )
-        .bind(utcTimestamp(now), group, id)
-        .run();
-      return result.meta.changes === 1;
+        .bind(utcTimestamp(now), group, id, ...scopeBindings(scope));
+      const results = await executeStatements(db, [result], scope);
+      return results[0]?.meta.changes === 1;
     },
     async claimDue(now: Date) {
       const timestamp = utcTimestamp(now);

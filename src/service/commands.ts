@@ -8,7 +8,10 @@ import { boundedList, formatTokyoTime, registrationReply } from "./replies";
 
 type Repositories = Readonly<{
   items: ReturnType<typeof createItemsRepo>;
-  reminders: ReturnType<typeof createRemindersRepo>;
+  reminders: Pick<
+    ReturnType<typeof createRemindersRepo>,
+    "create" | "listUnsent" | "cancel"
+  >;
 }>;
 type Request = Readonly<{
   text: string;
