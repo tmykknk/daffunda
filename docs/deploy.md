@@ -10,7 +10,7 @@
 - wrangler はグローバルではなくプロジェクトの devDependency。次の別名を使う（シェルのセッションごとに設定）:
   `alias wr='mise exec -- pnpm exec wrangler'`
 - `<DB名>` は wrangler.toml の `[[d1_databases]]` の `database_name` の値
-- 実在の `database_id` は `mise.local.toml`（gitignore 済み）の `D1_DATABASE_ID` にだけ書く
+- 手元で使う実在の `database_id` は `mise.local.toml`（gitignore 済み）の `D1_DATABASE_ID` に書く。M8のCI用にはGitHub Environment secretsにも登録する（F参照）
 
 ## 触るファイルの一覧
 | ファイル | 内容 | コミット |
@@ -155,3 +155,72 @@
 | `database_id` が見つからない・不正 | `mise.local.toml` が正しいか。`gen-wrangler-config.sh` を `mise exec -- ` 付きで実行したか（付けないと環境変数が渡らない） |
 | 生成した設定ファイルが `git status` に出る | `.gitignore` に `wrangler.generated.toml` が無い。追記する |
 | ローカルの署名確認で (a) が 401 になる | `.dev.vars` のシークレットと `openssl` に渡した鍵が同じか。`BODY` と `--data-binary` の本文が完全に同一か（シングルクォートで囲む）。末尾に改行が入っていないか（`printf '%s'`） |
+
+## F. GitHub Actionsによるデプロイの事前準備（M8）
+
+M8は任意。Codexはワークフローと手順を作成し、以下の画面設定・Secret登録・初回動作確認は人間が行う。
+現在の `check.yml` は品質検査と秘密情報の検査だけで、デプロイは行わない。
+既存のWorkerとD1を使い、本番でWebhookとCronが正常に動くことを先に確認する。
+
+### 1. GitHub Environmentと手動承認
+
+1. リポジトリの **Settings → Environments → New environment** を開く。
+2. 名前を `production` にして **Configure environment** を押す。作成済みなら `production` を開く。
+3. **Required reviewers** を有効にし、承認者として自分を登録する。
+4. 1人で運用する場合は **Prevent self-review** をオフにする。オンだと自分が起動した実行を自分で承認できない。
+5. **Allow administrators to bypass configured protection rules** をオフにし、**Save protection rules** で保存する。
+6. 同じ画面の **Deployment branches and tags**（公式手順ではドロップダウンを **Deployment branches** と表記）で、
+   **Selected branches and tags** を選ぶ。
+7. **Add deployment branch or tag rule** → **Ref type: Branch** → 名前パターン `main` → **Add rule**。
+   許可ルールはこのBranchの `main` だけにし、Tagやワイルドカードのルールは追加しない。
+
+「mainだけを許可」という選択肢はなく、上記の順でルールを追加する。
+**Protected branches only** は保護ルールがない場合に全ブランチを許可するため、main限定の代わりには使わない。
+
+項目が見当たらない場合は、リポジトリ全体の **Settings → Branches / Rules** ではなく、
+**Settings → Environments → production** の個別設定を開いているか確認する。
+個人リポジトリでは所有者、Organizationではadmin権限が必要。
+公開リポジトリでは現在のGitHub Freeを含め利用できるが、非公開ではプランによる制限がある。
+特にFree/Pro/TeamのRequired reviewersは公開リポジトリのみ。
+承認設定を利用できない場合はM8の手動承認条件を満たせないため、解決するまではCの手動デプロイを使う。
+
+公式: [Environmentの設定手順](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)、
+[ブランチ・タグ制限と承認規則](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)。
+
+### 2. CloudflareのCI用APIトークン
+
+Cloudflareのプロフィールにある **API Tokens** から、**Edit Cloudflare Workers** テンプレートを基に作成する。
+対象アカウントを既存Workerのあるアカウントに限定する。
+D1マイグレーションも自動適用するワークフローでは、対象アカウントの **D1: Edit** 権限も追加する。
+APIトークンの値は安全な場所に控え、チャット・ソース・ドキュメントに貼らない。
+CIでは手元の `wr login` の認証は引き継がれない。
+
+公式: [CloudflareのGitHub Actions連携](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)、
+[D1 APIトークンの権限設定](https://developers.cloudflare.com/d1/tutorials/import-to-d1-with-rest-api/)。
+
+### 3. Environment secrets
+
+**Settings → Environments → production → Environment secrets → Add secret** で、次の3つを登録する。
+Repository secretsやEnvironment variablesではなく、承認後に使えるEnvironment secretsに登録する。
+
+| 名前 | 内容 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | 手順2で作成したCI用APIトークン |
+| `CLOUDFLARE_ACCOUNT_ID` | 既存WorkerとD1があるCloudflareアカウントのID |
+| `D1_DATABASE_ID` | 既存D1のID（手元の `mise.local.toml` と同じ対象） |
+
+実際の値はGitHubの設定画面に直接入力する。Codexへの入力やコミットは不要。
+CIでは `D1_DATABASE_ID` を環境変数として設定ファイル生成スクリプトへ渡す。
+生成した `wrangler.generated.toml` は実IDを含むので、コミット・ログ出力・artifactへの保存をしない。
+Cloudflareに登録済みの `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`ALLOWED_GROUP_ID` は、
+既存Workerを使うためGitHubへ再登録しない。
+
+### 4. M8のワークフローと初回確認
+
+ワークフローはmainへのマージ後だけを対象にし、UTC/JSTの品質検査と全履歴の秘密情報検査が成功した後、
+`production` の手動承認を待つ。承認後に設定生成 → リモートD1マイグレーション適用 → Workerデプロイの順で実行する。
+PRからはデプロイしない。main限定はEnvironmentのルールとワークフローの両方で制限する。
+
+人間はM8のマージ後、GitHub Actionsで検査成功・承認待ちになることを確認してから、対象コミットを確認して承認する。
+適用・デプロイ成功後はCのログ確認と `docs/manual-test.md` の実機確認を行う。
+ワークフローの作成だけで本番動作確認済みにはしない。M8完了前はCの手動デプロイを使う。
