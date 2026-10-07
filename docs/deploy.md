@@ -190,13 +190,14 @@ M8で `check.yml` に承認付きのdeployジョブを追加した。Secret登�
 ### 2. CloudflareのCI用APIトークン
 
 Cloudflareのプロフィールにある **API Tokens** から、**Edit Cloudflare Workers** テンプレートを基に作成する。
-対象アカウントを既存Workerのあるアカウントに限定する。
-D1マイグレーションも自動適用するワークフローでは、対象アカウントの **D1: Edit** 権限も追加する。
+これはWorker公開用の権限。対象アカウントを既存Workerのあるアカウントに限定する。
+このワークフローはD1マイグレーションも実行するため、トークン作成画面の追加権限で同じアカウントの **D1: Edit** を別途追加する。
+WorkersのテンプレートだけではD1への書き込み権限を満たさない。D1の一覧確認はできても、マイグレーション適用が失敗する場合がある。
 APIトークンの値は安全な場所に控え、チャット・ソース・ドキュメントに貼らない。
 CIでは手元の `wr login` の認証は引き継がれない。
 
 公式: [CloudflareのGitHub Actions連携](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)、
-[D1 APIトークンの権限設定](https://developers.cloudflare.com/d1/tutorials/import-to-d1-with-rest-api/)。
+[APIトークン権限一覧（D1 Edit）](https://developers.cloudflare.com/fundamentals/api/reference/permissions/)。
 
 ### 3. Environment secrets
 
