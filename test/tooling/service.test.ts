@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as v from "valibot";
 import { expect, test, vi } from "vitest";
-import { handleText } from "../../src/service/commands";
+import { handleReply, handleText } from "../../src/service/commands";
 
 const cases = v.parse(
   v.array(v.object({ input: v.string(), expect: v.nullable(v.string()) })),
@@ -59,4 +59,15 @@ test("DBエラーは成功返信へ変換せず呼び出し元へ伝える", asy
       repos,
     ),
   ).rejects.toThrow("DBに触れてはいけません");
+});
+
+test("ボタン付きserviceも雑談を無視し、日時エラーにはボタンを付けない", async () => {
+  unavailable.mockClear();
+  const input = { groupId: "C_test_group_1", userId: null, now };
+  expect(await handleReply({ ...input, text: "テスト雑談" }, repos)).toBeNull();
+  expect(await handleReply({ ...input, text: "/テスト 昨日" }, repos)).toEqual({
+    text: "過去の日時は登録できません",
+    actions: [],
+  });
+  expect(unavailable).not.toHaveBeenCalled();
 });

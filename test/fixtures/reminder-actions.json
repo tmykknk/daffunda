@@ -1,0 +1,48 @@
+{
+  "valid": [
+    {
+      "data": "reminder:v1:cancel:1",
+      "expect": {
+        "type": "cancel",
+        "id": 1
+      }
+    },
+    {
+      "data": "reminder:v1:cancel:9007199254740991",
+      "expect": {
+        "type": "cancel",
+        "id": 9007199254740991
+      }
+    },
+    {
+      "data": "reminder:v1:page:0",
+      "expect": {
+        "type": "page",
+        "offset": 0
+      }
+    },
+    {
+      "data": "reminder:v1:page:10",
+      "expect": {
+        "type": "page",
+        "offset": 10
+      }
+    }
+  ],
+  "invalid": [
+    "",
+    "other:cancel:1",
+    "reminder:v2:cancel:1",
+    "reminder:v1:cancel:0",
+    "reminder:v1:cancel:01",
+    "reminder:v1:cancel:-1",
+    "reminder:v1:cancel:1.0",
+    "reminder:v1:cancel:１",
+    "reminder:v1:cancel:1:extra",
+    "reminder:v1:cancel:9007199254740992",
+    "reminder:v1:page:-1",
+    "reminder:v1:page:",
+    "reminder:v1:page:1e1",
+    "reminder:v1:unknown:1"
+  ]
+}

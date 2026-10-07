@@ -4,6 +4,8 @@ export const MESSAGES = Object.freeze({
   health: "準備完了",
   internalError: "処理に失敗しました",
   emptyItems: "リストは空です",
+  emptyReminderPage:
+    "このページの予定はありません。リマインドで一覧を更新してください",
   emptyReminders: "未送信リマインダーはありません",
   limitError: `1メッセージは${MAX_ITEMS_PER_MESSAGE}品目まで、品目名は${MAX_ITEM_NAME_LENGTH}文字までです`,
   help: "+テスト品目: 追加\n-テスト品目: 削除\nリスト / りすと: 買い物一覧\n/テスト 明日15時: 単発リマインダー登録\nリマインド: 未送信一覧\nリマインド削除 3: 取消\nヘルプ: 使い方",
@@ -39,6 +41,11 @@ export const REPLY_TEXT = Object.freeze({
   registrationPrefix: (id: number) => `登録 #${id}: `,
   registrationSuffix: (id: number, time: string) =>
     ` → ${time}\n取消: リマインド削除 ${id}`,
+  cancelButton: (id: number) => `取消 #${id}`,
+  cancelButtonsTitle: "取消する予定を選んでください",
+  nextReminderPage: "次のページ",
+  alreadyCanceled: (id: number) => `すでに取消済みです: #${id}`,
+  alreadySent: (id: number) => `すでに送信済みです: #${id}`,
   canceled: (id: number) => `取消: #${id}`,
   missingReminder: (id: number) => `見つからない: #${id}`,
   truncated: "…",
