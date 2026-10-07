@@ -217,10 +217,8 @@ Cloudflareに登録済みの `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`
 
 ### 4. Secret登録後：保護設定を確認して有効化する
 
-**M8マージ直後の要修正点（c5b9b8bのレビュー）**:
-`check.yml` の `wrangler d1 migrations apply` に付いた `--yes` は、プロジェクトのWranglerでは
-`Unknown argument: yes` で失敗する。まずこの引数を削除する修正をPRでマージし、テストも実CLIの引数を検証する形にする。
-CI・非対話環境では確認入力が自動で省略されるため、この引数は不要。修正前の実行は承認しない。
+`wrangler d1 migrations apply` はCI・非対話環境では確認入力が自動で省略される。
+プロジェクトのWranglerで未対応の `--yes` は付けない。コマンドを変更する場合はテストの期待値も整合させる。
 
 1. F-1の `production` の承認者・main限定が保存され、F-3の3つのSecretが登録されていることを確認する。
 2. mainのブランチ保護またはrulesetで、PR経由の更新とUTC/JSTのcheck・secrets成功を必須にする。
@@ -240,7 +238,7 @@ CI・非対話環境では確認入力が自動で省略されるため、この
 
 1. **Actions → check** を開く。別名のdeployワークフローはなく、check内にdeployジョブがある。
 2. **最新mainのコミットに対するpush実行**を開く。PRの検査実行を選ばない。
-   上記の不具合修正後のコミットであることも確認する。
+   ワークフローやテストの修正が必要だった場合は、その修正後のコミットであることも確認する。
 3. その実行が有効化前に終わりdeployが `Skipped` になっていた場合、右上の **Re-run all jobs** を選び、
    **Re-run jobs** で再実行する。`Re-run failed jobs` ではなく全ジョブを再実行する。
    既に有効化後の実行が進行中なら、その完了を待つ。
@@ -270,6 +268,7 @@ CI・非対話環境では確認入力が自動で省略されるため、この
 | 表示・状態 | 対応 |
 |---|---|
 | deployが `Skipped` | Repository variableの名前・小文字の `true`・push/mainの実行か・前段検査の成功を確認し、F-5で全ジョブを再実行する |
+| checkのテストが失敗 | 原因を修正してmainへ取り込み、新しいコミットの実行を使う。Re-runは修正前と同じコードを使うため、コードの不具合は再実行だけでは直らない |
 | `Review deployments` がない | 検査中・スキップ・既に承認済みかを確認する。承認なしで実行が始まるならproductionのRequired reviewers設定を確認する |
 | 自分で承認できない | productionの承認者に自分が登録され、1人運用ならPrevent self-reviewがオフか確認する |
 | `Deployment configuration is missing` | productionの3つのEnvironment secretsの名前と空でないことを確認する |

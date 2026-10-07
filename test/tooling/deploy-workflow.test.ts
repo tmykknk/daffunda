@@ -104,7 +104,7 @@ test.each([
       else {
         const calls = readFileSync(commands, "utf8").trim().split("\n");
         expect(calls[0]).toBe(
-          "exec wrangler d1 migrations apply DB --remote --config wrangler.generated.toml --yes",
+          "exec wrangler d1 migrations apply DB --remote --config wrangler.generated.toml",
         );
         expect(calls).toHaveLength(scenario === "migration-failure" ? 1 : 2);
         if (calls.length === 2)
