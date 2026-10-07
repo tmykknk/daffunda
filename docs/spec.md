@@ -103,7 +103,10 @@ processed_events(event_id TEXT PRIMARY KEY NOT NULL, operation_key TEXT, created
 ## 設定ファイル
 - wrangler.toml はコミットし、database_id は `<YOUR_D1_DATABASE_ID>` のプレースホルダー
 - scripts/gen-wrangler-config.sh が環境変数 D1_DATABASE_ID から wrangler.generated.toml（gitignore）を生成し、デプロイはそれを使う
-- デプロイは人間がローカルから実行する（GitHub Actions による自動デプロイは今回は作らない）
+- 初回デプロイとSecret設定は人間がローカルから実行する。
+  M8の更新用Actionsは、人間がproduction Environmentの承認・Secret・main制限を設定して有効化した場合のみ使える。
+  mainへの反映後、UTC/JST検査とgitleaks成功→手動承認→最新SHA照合→D1マイグレーション→Worker公開の順で実行する。
+  PRからは実行せず、設定不足・古いSHA・マイグレーション失敗は公開を止める。詳細はdocs/deploy.mdのFを参照。
 
 ## 受け入れ基準
 - docs/parser-cases.md の全行（P-系）

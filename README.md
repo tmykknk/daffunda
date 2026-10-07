@@ -127,7 +127,7 @@ fi
 
 LINE の設定、デプロイ、groupId の取得、実機確認は `docs/line-setup.md` に従う。
 時期は「2. 実行手順」の 2・8・9・10 を参照（M5 の後に初回、M6 の後にリマインダー、M7a の後に再確認）。
-自動デプロイ（CD）は今回作らない（`decisions.md` D-12）。
+更新用の承認付きActions（M8）は[デプロイ手順F](docs/deploy.md#f-m8-承認付きgithub-actionsで更新する人間が設定確認)に従って人間が有効化できます。初回導入とSecret操作は手元で行います。
 
 1. LINE Developers でチャネルを作成し、チャネルシークレットとアクセストークンを取得
 2. `wrangler d1 create` → マイグレーション適用
@@ -221,7 +221,7 @@ TZ=Asia/Tokyo mise exec -- pnpm check
 - `#番号`は内部IDです。空の一覧でもリセット・再利用しません。登録確認はテキストだけです。一覧の取消ボタンから手入力なしで取り消せます。内容は最大2行で省略し、DB本文は保持します。取消後は結果テキストだけを返し、最新一覧は「リマインド」で取得します。「リマインド削除 N」も使えます。
 - Cronは5分超の送信滞留を復旧し、同じ再試行キーで再送します。Push失敗は最大3回、初回claimから24時間以降は重複防止のため停止します。`sent`はLINEの受理を表し、端末への配送保証ではありません。送信開始済みのPushは取消で巻き戻せません。
 - DB更新はイベント記録と原子的ですが、Reply送信とは原子的ではありません。更新成功後に返信だけ失敗する可能性があります。一覧の内容・長い返信・Pushは表示用に省略し、DBの内容は保持します。「次のページ」で続き、途中の追加・取消後は「リマインド」で更新してください。
-- デプロイは人間が手元で行います。公開前に[レビューチェックリスト](docs/review-checklist.md)を確認してください。
+- 初回デプロイは人間が手元で行います。更新用Actionsはproduction承認設定後に人間が有効化します。公開前に[レビューチェックリスト](docs/review-checklist.md)を確認してください。
 
 [設計判断と既知の制約](docs/decisions.md)・[タスク](docs/tasks.md)・[開発規約](docs/conventions.md)・[検査仕様](docs/tooling.md)・[レビュー基準](docs/review-checklist.md)。ライセンスは[MIT](LICENSE)です。
 
@@ -282,4 +282,4 @@ Only the allowed group is processed by Webhook and the minute-based Cron. Missin
 
 Reminder numbers are internal IDs and are not reset/reused when the list becomes empty. Registration confirmations are text only. Lists have cancellation buttons that retain the internal ID; content is previewed in at most two lines without changing stored content. Cancellation replies contain only the result text; send `リマインド` again for the current list. The text cancellation command remains available. Cron recovers sending entries after more than five minutes and reuses the same retry key. Push failures stop after three attempts; retries stop 24 hours after the first claim to avoid duplicates. LINE acceptance does not guarantee delivery. Cancellation cannot undo an already-started Push. Event records and business updates are atomic, but Reply delivery is separate and can fail after the update succeeds. List previews and long messages are shortened without changing stored content. Use the next-page button, or refresh with `リマインド` after adding/canceling entries.
 
-Deployment is manual. See [decisions and limitations](docs/decisions.md), [tasks](docs/tasks.md), [conventions](docs/conventions.md), [tooling](docs/tooling.md), [review checks](docs/review-checklist.md), and the [pre-PR checklist](docs/review-checklist.md). Licensed under [MIT](LICENSE).
+Initial deployment is manual. Optional M8 updates use GitHub Actions after main checks and production Environment approval; a human must configure reviewers, branch restrictions, Environment secrets, and the enable variable first (deployment guide F). See [decisions and limitations](docs/decisions.md), [tasks](docs/tasks.md), [conventions](docs/conventions.md), [tooling](docs/tooling.md), [review checks](docs/review-checklist.md), and the [pre-PR checklist](docs/review-checklist.md). Licensed under [MIT](LICENSE).

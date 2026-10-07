@@ -224,3 +224,53 @@ PRからはデプロイしない。main限定はEnvironmentのルールとワー
 人間はM8のマージ後、GitHub Actionsで検査成功・承認待ちになることを確認してから、対象コミットを確認して承認する。
 適用・デプロイ成功後はCのログ確認と `docs/manual-test.md` の実機確認を行う。
 ワークフローの作成だけで本番動作確認済みにはしない。M8完了前はCの手動デプロイを使う。
+
+
+## F. M8: 承認付きGitHub Actionsで更新する（人間が設定・確認）
+
+初回導入はA/B0/Bで行い、WorkerのLINE用Secretも引き続き人間が管理する。
+M8はワークフローの作成のみ。エージェントはEnvironment設定・Secret登録・実デプロイ・リモートD1操作を実施しない。
+
+### 有効化前の準備
+
+1. GitHubのSettings → Environmentsで`production`を作り、Required reviewersを設定する。
+   使用中の公開範囲・プランで承認機能が利用でき、承認前にジョブ/Secretが解放されないことを確認する。
+   必要なら管理者による保護の迂回を無効にする。承認機能が使えない場合は有効化せず、Cの手動更新を使う。
+2. Deployment branches and tagsを選択式にし、branch `main`だけを許可する（同名tagを許可しない）。
+   mainのブランチ保護/rulesetではPR経由とUTC/JST check・secrets成功を必須にし、直接pushを防ぐ。
+3. `production`のEnvironment secretsへ次の名前で登録する。値は手元で入力し、リポジトリ・PR・チャットに貼らない。
+   - `CLOUDFLARE_API_TOKEN`: 対象アカウントのWorkers Scripts編集・D1編集に必要な最小権限のtoken。
+   - `CLOUDFLARE_ACCOUNT_ID`: 対象アカウント。
+   - `D1_DATABASE_ID`: Aで作成した既存DB。別DBを新規作成しない。
+   Cloudflareの[GitHub Actions手順](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)と
+   [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)で権限と移行を確認する。
+   GitHubの[Environment保護](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)も参照する。
+4. Environmentとmain保護を設定し終えた後だけ、Repository Actions variablesに
+   `ENABLE_PRODUCTION_DEPLOY`を`true`として設定する。未設定・他の値ならdeployはスキップされる。
+   この変数は承認の代替ではない。Environment承認の動作を確認せずtrueにしない。
+
+### 更新・確認
+
+1. PRをレビューしてmainへマージする。既存の`check`ワークフローでUTC/JST検査・全履歴gitleaksが成功するまで待つ。
+2. `production`の承認画面で対象SHA・差分・マイグレーションを確認し、手動承認する。
+   承認待ちの間にmainが進んだ古い実行は承認しない。実装も最新mainとSHAが異なると停止する。
+3. 承認したSHAをcheckoutし、miseと固定lockfileでツールを導入してから、
+   設定確認→最新SHA照合→生成設定→既存DBのマイグレーション→Worker公開を順に行う。
+   実行中のデプロイは新しいpushでキャンセルしない。承認後の実行中はmainの更新を控える。
+4. 公開後はB/Cの疎通と[実機確認](manual-test.md)を人間が実施する。実値やCLI出力は外部へ貼らない。
+   エージェントのローカル/PR検査成功は本番承認・実デプロイ成功の代わりではない。
+
+### 失敗・停止
+
+- 設定不足・古いSHAならリモート操作前に停止。最新mainの正常な実行を確認する。
+- D1移行失敗ならWorkerを公開しない。人間が手元で移行状態を確認し、互換性と原因を調べる。
+- 移行成功後の公開失敗ではDBを自動で巻き戻さない。最新SHAと互換性を確認後、同じ実行を再実行/再承認する。
+- CLI出力はIDやWorker URLを含み得るためActionsログ/成果物へ出さない。固定エラーだけを表示し、一時出力と生成設定は削除する。
+- 自動更新を止めるにはRepository variableをfalseにし、既に承認待ちの実行も人間が却下/キャンセルする。
+  実行中の移行/公開を途中で中断する判断は人間が行う。無効化は進行中の操作を巻き戻さない。
+
+### 人間の確認記録（値は記録しない）
+
+- production required reviewers・main限定・Secret登録・main保護: 未実施/OK/NG。
+- mainマージ後の検査成功、承認前の停止、承認後の更新、PR時スキップ: 未実施/OK/NG。
+- 公開後の実LINE・Cron確認: 未実施/OK/NG。対象SHAと固定エラーコードだけを記録する。

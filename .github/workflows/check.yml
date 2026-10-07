@@ -32,3 +32,52 @@ jobs:
           fetch-depth: 0
       - name: Scan all Git history with checksum-verified gitleaks
         run: sh scripts/check-secrets.sh
+
+  deploy:
+    needs: [check, secrets]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_PRODUCTION_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+      - run: pnpm install --frozen-lockfile
+      - name: Apply migrations before publishing the approved revision
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          WRANGLER_SEND_METRICS: "false"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$D1_DATABASE_ID" ]; then
+            echo "::error::Deployment configuration is missing"
+            exit 1
+          fi
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "::error::Approved revision is no longer the main tip"
+            exit 1
+          fi
+          sh scripts/gen-wrangler-config.sh
+          if ! pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.generated.toml --yes > "$RUNNER_TEMP/migrations.log" 2>&1; then
+            echo "::error::D1 migration failed; Worker was not published"
+            exit 1
+          fi
+          if ! pnpm exec wrangler deploy --config wrangler.generated.toml > "$RUNNER_TEMP/deploy.log" 2>&1; then
+            echo "::error::Worker publication failed"
+            exit 1
+          fi
+      - name: Remove generated configuration and private CLI output
+        if: always()
+        shell: bash
+        run: rm -f wrangler.generated.toml "$RUNNER_TEMP/migrations.log" "$RUNNER_TEMP/deploy.log"

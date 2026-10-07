@@ -90,4 +90,7 @@ entry を src/index.ts に設定し、未使用のエクスポート・ファイ
 - ジョブ2 secrets: gitleaks を全履歴（fetch-depth: 0）に対して実行
 - 外部 Action はコミットSHAで固定。pull_request_target は使わない。権限は最小（contents: read）
 - setup-node / pnpm/action-setup / corepack は使わない
-- デプロイ用ジョブとシークレットは置かない（今回は CD を作らない）
+- M8で既存checkワークフローに更新用deployジョブを追加（D-55）。検査設定・閾値は維持する。
+  main pushかつENABLE_PRODUCTION_DEPLOY=trueのみ、check/secrets両ジョブ成功後にproduction Environmentで手動承認する。
+  Cloudflare用3 Secretは人間がEnvironmentに設定し、通常の検査ジョブには渡さない。
+  required reviewers・main制限・実際の動作確認は人間が行い、未設定なら有効化しない。
