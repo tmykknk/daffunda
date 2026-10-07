@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { MAX_POSTBACK_DATA_LENGTH } from "../constants";
 
 const text = v.pipe(v.string(), v.minLength(1));
 const source = v.object({
@@ -17,6 +18,7 @@ export const webhookSchema = v.object({
       webhookEventId: v.optional(text),
       replyToken: v.optional(text),
       message: v.optional(v.unknown()),
+      postback: v.optional(v.unknown()),
     }),
   ),
 });
@@ -31,3 +33,12 @@ export type WebhookEvent = v.InferOutput<
 export function configured(value: string | undefined): value is string {
   return Boolean(value?.trim()) && !/[<>]/u.test(value ?? "");
 }
+
+// 公式「ポストバックイベント」: paramsや表示テキストを業務処理へ渡さない。
+export const postbackSchema = v.object({
+  data: v.pipe(
+    v.string(),
+    v.minLength(1),
+    v.maxLength(MAX_POSTBACK_DATA_LENGTH),
+  ),
+});

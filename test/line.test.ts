@@ -116,3 +116,77 @@ test("Pushは空欄・不正UUID・文字数上限をfetch前に拒否する", a
   }
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+// 公式「Flex Message」「バブル」「ボックス」「ボタン」「ポストバックアクション」。
+test("Replyは既存textと取消Flexを同じリクエストで送り、displayTextを付けない", async () => {
+  const fetcher = vi.fn(async () => ({ ok: true, status: 200 }));
+  await createReplyClient(fetcher)(
+    "test-token",
+    "test-reply",
+    "登録 #1: テスト",
+    [{ label: "取消 #1", data: "reminder:v1:cancel:1" }],
+  );
+  expect(fetcher).toHaveBeenCalledWith(
+    "https://api.line.me/v2/bot/message/reply",
+    expect.objectContaining({
+      body: JSON.stringify({
+        replyToken: "test-reply",
+        messages: [
+          { type: "text", text: "登録 #1: テスト" },
+          {
+            type: "flex",
+            altText: "取消する予定を選んでください",
+            contents: {
+              type: "bubble",
+              body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "button",
+                    height: "sm",
+                    action: {
+                      type: "postback",
+                      label: "取消 #1",
+                      data: "reminder:v1:cancel:1",
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      }),
+    }),
+  );
+});
+
+test("Flexのラベル40・data300・11ボタンを通し、超過と空値は送信前に拒否する", async () => {
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
+    async () => ({ ok: true, status: 200 }),
+  );
+  const reply = createReplyClient(fetcher);
+  const action = { label: "あ".repeat(40), data: "\n".repeat(300) };
+  await reply(
+    "test-token",
+    "test-reply",
+    "テスト",
+    Array.from({ length: 11 }, () => action),
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const body = fetcher.mock.calls[0]?.[1]?.body;
+  if (!body) throw new Error("送信なし");
+  expect(new TextEncoder().encode(body).byteLength).toBeLessThan(30_000);
+  fetcher.mockClear();
+  for (const actions of [
+    [{ ...action, label: "" }],
+    [{ ...action, label: "あ".repeat(41) }],
+    [{ ...action, data: "" }],
+    [{ ...action, data: "あ".repeat(301) }],
+    Array.from({ length: 12 }, () => action),
+  ])
+    await expect(
+      reply("test-token", "test-reply", "テスト", actions),
+    ).rejects.toThrow("LINE_REPLY_INVALID");
+  expect(fetcher).not.toHaveBeenCalled();
+});

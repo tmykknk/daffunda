@@ -2,10 +2,12 @@ import type { D1Database } from "@cloudflare/workers-types";
 import * as v from "valibot";
 import { HTTP_STATUS } from "../constants";
 import { parse } from "../domain/parser";
+import { parseReminderAction } from "../domain/reminder-action";
 import type { createReplyClient } from "../line/reply";
 import { verifySignature } from "../line/verify";
 import {
   configured,
+  postbackSchema,
   textMessageSchema,
   type WebhookEvent,
   webhookSchema,
@@ -13,7 +15,8 @@ import {
 import { logRejected } from "../logger";
 import { DuplicateEvent } from "../repo/event-operation";
 import { createWebhookRepos } from "../repo/webhook-repos";
-import { handleText } from "./commands";
+import { handleReply } from "./commands";
+import { handleReminderAction } from "./reminder-actions";
 
 export type WebhookBindings = Readonly<{
   DB: D1Database;
@@ -26,7 +29,9 @@ export type WebhookOptions = Readonly<{
   now: () => Date;
 }>;
 type CommandEvent = Readonly<{
-  text: string;
+  payload:
+    | NonNullable<ReturnType<typeof parseReminderAction>>
+    | Readonly<{ type: "text"; text: string }>;
   groupId: string;
   userId: string | null;
   eventId: string;
@@ -46,6 +51,18 @@ function permitted(event: WebhookEvent, allowed: string | undefined): boolean {
   return false;
 }
 
+function commandPayload(event: WebhookEvent): CommandEvent["payload"] | null {
+  if (event.type === "postback") {
+    const decoded = v.safeParse(postbackSchema, event.postback);
+    return decoded.success ? parseReminderAction(decoded.output.data) : null;
+  }
+  if (event.type !== "message") return null;
+  const parsed = v.safeParse(textMessageSchema, event.message);
+  return parsed.success && parse(parsed.output.text).type !== "ignore"
+    ? { type: "text", text: parsed.output.text }
+    : null;
+}
+
 async function handleEvent(
   event: WebhookEvent,
   env: WebhookBindings,
@@ -53,18 +70,17 @@ async function handleEvent(
 ): Promise<void> {
   if (!permitted(event, env.ALLOWED_GROUP_ID)) return;
   if (
-    event.type !== "message" ||
     event.mode !== "active" ||
     !event.webhookEventId ||
     !event.replyToken ||
     !event.source?.groupId
   )
     return;
-  const parsed = v.safeParse(textMessageSchema, event.message);
-  if (!parsed.success || parse(parsed.output.text).type === "ignore") return;
+  const payload = commandPayload(event);
+  if (!payload) return;
   await respondToCommand(
     {
-      text: parsed.output.text,
+      payload,
       groupId: event.source.groupId,
       userId: event.source.userId ?? null,
       eventId: event.webhookEventId,
@@ -86,22 +102,21 @@ async function respondToCommand(
   const now = options.now();
   const repos = createWebhookRepos(env.DB, event.eventId, now);
   try {
-    const text = await handleText(
-      {
-        text: event.text,
-        groupId: event.groupId,
-        userId: event.userId,
-        now,
-      },
-      repos,
-    );
+    const input = { groupId: event.groupId, userId: event.userId, now };
+    const reply =
+      event.payload.type === "text"
+        ? await handleReply({ ...input, text: event.payload.text }, repos)
+        : await handleReminderAction(event.payload, input, repos.reminders);
     await repos.finish();
-    if (text)
-      await options.reply(
+    if (reply) {
+      const args: [string, string, string] = [
         env.LINE_CHANNEL_ACCESS_TOKEN,
         event.replyToken,
-        text,
-      );
+        reply.text,
+      ];
+      if (reply.actions.length) await options.reply(...args, reply.actions);
+      else await options.reply(...args);
+    }
   } catch (error) {
     if (!(error instanceof DuplicateEvent)) throw error;
   }

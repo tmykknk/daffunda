@@ -79,6 +79,25 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
       const results = await executeStatements(db, [result], scope);
       return results[0]?.meta.changes === 1;
     },
+    async cancelForButton(group: string, id: number, now: Date) {
+      const update = db
+        .prepare(
+          "UPDATE reminders SET status = 'canceled', updated_at = ?, claim_token = NULL WHERE group_id = ? AND id = ? AND status IN ('pending', 'sending', 'failed') AND (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?))",
+        )
+        .bind(utcTimestamp(now), group, id, ...scopeBindings(scope));
+      const select = db
+        .prepare(
+          "SELECT * FROM reminders WHERE group_id = ? AND id = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?))",
+        )
+        .bind(group, id, ...scopeBindings(scope));
+      // 状態案内もイベント記録・取消と同じバッチで確定し、競合するsentを上書きしない。
+      const results = await executeStatements(db, [update, select], scope);
+      const row = parseRows(reminderSchema, results[1]?.results ?? [])[0];
+      if (results[0]?.meta.changes === 1) return "canceled";
+      if (row?.status === "canceled") return "alreadyCanceled";
+      if (row?.status === "sent") return "alreadySent";
+      return "missing";
+    },
     async claimDue(now: Date, group: string) {
       const timestamp = utcTimestamp(now);
       const candidates = await db
