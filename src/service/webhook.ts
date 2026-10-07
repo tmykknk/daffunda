@@ -108,15 +108,12 @@ async function respondToCommand(
         ? await handleReply({ ...input, text: event.payload.text }, repos)
         : await handleReminderAction(event.payload, input, repos.reminders);
     await repos.finish();
-    if (reply) {
-      const args: [string, string, string] = [
+    if (reply)
+      await options.reply(
         env.LINE_CHANNEL_ACCESS_TOKEN,
         event.replyToken,
-        reply.text,
-      ];
-      if (reply.actions.length) await options.reply(...args, reply.actions);
-      else await options.reply(...args);
-    }
+        reply,
+      );
   } catch (error) {
     if (!(error instanceof DuplicateEvent)) throw error;
   }

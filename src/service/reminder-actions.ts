@@ -1,7 +1,8 @@
 import type { parseReminderAction } from "../domain/reminder-action";
+import type { Reply } from "../domain/reply";
 import { REPLY_TEXT } from "../messages";
 import type { createRemindersRepo } from "../repo/reminders";
-import { type ButtonReply, reminderPageReply } from "./replies";
+import { reminderPageReply } from "./replies";
 
 type Input = Readonly<{ groupId: string; now: Date }>;
 export async function handleReminderAction(
@@ -11,7 +12,7 @@ export async function handleReminderAction(
     ReturnType<typeof createRemindersRepo>,
     "listUnsent" | "cancelForButton"
   >,
-): Promise<ButtonReply> {
+): Promise<Reply> {
   if (action.type === "page")
     return reminderPageReply(
       await repo.listUnsent(input.groupId),
@@ -26,5 +27,5 @@ export async function handleReminderAction(
     result === "missing"
       ? REPLY_TEXT.missingReminder(action.id)
       : REPLY_TEXT[result](action.id);
-  return { text, actions: [] };
+  return text;
 }

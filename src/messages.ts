@@ -41,8 +41,9 @@ export const REPLY_TEXT = Object.freeze({
   registrationPrefix: (id: number) => `登録 #${id}: `,
   registrationSuffix: (id: number, time: string) =>
     ` → ${time}\n取消: リマインド削除 ${id}`,
-  cancelButton: (id: number) => `取消 #${id}`,
-  cancelButtonsTitle: "取消する予定を選んでください",
+  cancelButton: "取消",
+  reminderListTitle: "未送信リマインダー一覧",
+  reminderId: (id: number) => `#${id}`,
   nextReminderPage: "次のページ",
   alreadyCanceled: (id: number) => `すでに取消済みです: #${id}`,
   alreadySent: (id: number) => `すでに送信済みです: #${id}`,
