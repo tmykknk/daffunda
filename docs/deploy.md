@@ -159,7 +159,7 @@
 ## F. GitHub Actionsによるデプロイの事前準備（M8）
 
 M8は任意。Codexはワークフローと手順を作成し、以下の画面設定・Secret登録・初回動作確認は人間が行う。
-現在の `check.yml` は品質検査と秘密情報の検査だけで、デプロイは行わない。
+M8で `check.yml` に承認付きのdeployジョブを追加した。Secret登録だけでは動かず、F-4のリポジトリ変数で有効化する。
 既存のWorkerとD1を使い、本番でWebhookとCronが正常に動くことを先に確認する。
 
 ### 1. GitHub Environmentと手動承認
@@ -215,62 +215,77 @@ CIでは `D1_DATABASE_ID` を環境変数として設定ファイル生成スク
 Cloudflareに登録済みの `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`ALLOWED_GROUP_ID` は、
 既存Workerを使うためGitHubへ再登録しない。
 
-### 4. M8のワークフローと初回確認
+### 4. Secret登録後：保護設定を確認して有効化する
 
-ワークフローはmainへのマージ後だけを対象にし、UTC/JSTの品質検査と全履歴の秘密情報検査が成功した後、
-`production` の手動承認を待つ。承認後に設定生成 → リモートD1マイグレーション適用 → Workerデプロイの順で実行する。
-PRからはデプロイしない。main限定はEnvironmentのルールとワークフローの両方で制限する。
+**M8マージ直後の要修正点（c5b9b8bのレビュー）**:
+`check.yml` の `wrangler d1 migrations apply` に付いた `--yes` は、プロジェクトのWranglerでは
+`Unknown argument: yes` で失敗する。まずこの引数を削除する修正をPRでマージし、テストも実CLIの引数を検証する形にする。
+CI・非対話環境では確認入力が自動で省略されるため、この引数は不要。修正前の実行は承認しない。
 
-人間はM8のマージ後、GitHub Actionsで検査成功・承認待ちになることを確認してから、対象コミットを確認して承認する。
-適用・デプロイ成功後はCのログ確認と `docs/manual-test.md` の実機確認を行う。
-ワークフローの作成だけで本番動作確認済みにはしない。M8完了前はCの手動デプロイを使う。
+1. F-1の `production` の承認者・main限定が保存され、F-3の3つのSecretが登録されていることを確認する。
+2. mainのブランチ保護またはrulesetで、PR経由の更新とUTC/JSTのcheck・secrets成功を必須にする。
+   ワークフローの `push` 条件だけでは直接pushとPRマージを区別できないため、mainへの直接pushを防ぐ。
+3. リポジトリの **Settings → Secrets and variables → Actions → Variables** タブを開く。
+4. **New repository variable** で次を登録する。
 
+   | 項目 | 入力 |
+   |---|---|
+   | Name | `ENABLE_PRODUCTION_DEPLOY` |
+   | Value | `true`（小文字） |
 
-## F. M8: 承認付きGitHub Actionsで更新する（人間が設定・確認）
+   このスイッチは **Repository variable**。Environment secretsやEnvironment variablesには登録しない。
+   未設定・`false`・他の値ならdeployジョブはスキップされる。登録だけでは新しい実行は始まらない。
 
-初回導入はA/B0/Bで行い、WorkerのLINE用Secretも引き続き人間が管理する。
-M8はワークフローの作成のみ。エージェントはEnvironment設定・Secret登録・実デプロイ・リモートD1操作を実施しない。
+### 5. 初回の実行を開始する（M8マージ済みの場合）
 
-### 有効化前の準備
+1. **Actions → check** を開く。別名のdeployワークフローはなく、check内にdeployジョブがある。
+2. **最新mainのコミットに対するpush実行**を開く。PRの検査実行を選ばない。
+   上記の不具合修正後のコミットであることも確認する。
+3. その実行が有効化前に終わりdeployが `Skipped` になっていた場合、右上の **Re-run all jobs** を選び、
+   **Re-run jobs** で再実行する。`Re-run failed jobs` ではなく全ジョブを再実行する。
+   既に有効化後の実行が進行中なら、その完了を待つ。
+4. 再実行できる最新mainのpush実行がない場合は、次の通常のPRをmainへマージして開始する。
+   手動起動用の `workflow_dispatch` は実装していないため、**Run workflow** ボタンはない。
 
-1. GitHubのSettings → Environmentsで`production`を作り、Required reviewersを設定する。
-   使用中の公開範囲・プランで承認機能が利用でき、承認前にジョブ/Secretが解放されないことを確認する。
-   必要なら管理者による保護の迂回を無効にする。承認機能が使えない場合は有効化せず、Cの手動更新を使う。
-2. Deployment branches and tagsを選択式にし、branch `main`だけを許可する（同名tagを許可しない）。
-   mainのブランチ保護/rulesetではPR経由とUTC/JST check・secrets成功を必須にし、直接pushを防ぐ。
-3. `production`のEnvironment secretsへ次の名前で登録する。値は手元で入力し、リポジトリ・PR・チャットに貼らない。
-   - `CLOUDFLARE_API_TOKEN`: 対象アカウントのWorkers Scripts編集・D1編集に必要な最小権限のtoken。
-   - `CLOUDFLARE_ACCOUNT_ID`: 対象アカウント。
-   - `D1_DATABASE_ID`: Aで作成した既存DB。別DBを新規作成しない。
-   Cloudflareの[GitHub Actions手順](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)と
-   [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)で権限と移行を確認する。
-   GitHubの[Environment保護](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)も参照する。
-4. Environmentとmain保護を設定し終えた後だけ、Repository Actions variablesに
-   `ENABLE_PRODUCTION_DEPLOY`を`true`として設定する。未設定・他の値ならdeployはスキップされる。
-   この変数は承認の代替ではない。Environment承認の動作を確認せずtrueにしない。
+再実行は元のコミットを使う。mainが進んでいたら古い実行を再利用せず、最新mainの実行を選ぶ。
+公式: [ワークフローの再実行](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
 
-### 更新・確認
+### 6. 検査成功後に承認し、本番を確認する
 
-1. PRをレビューしてmainへマージする。既存の`check`ワークフローでUTC/JST検査・全履歴gitleaksが成功するまで待つ。
-2. `production`の承認画面で対象SHA・差分・マイグレーションを確認し、手動承認する。
+1. UTC/JSTの `check` と `secrets` の3つが成功するまで待つ。
+2. 同じ実行画面でdeployが承認待ちになったら **Review deployments** を押す。
+3. `production` を選び、対象コミット・差分・マイグレーションを確認して **Approve and deploy** を押す。
    承認待ちの間にmainが進んだ古い実行は承認しない。実装も最新mainとSHAが異なると停止する。
-3. 承認したSHAをcheckoutし、miseと固定lockfileでツールを導入してから、
-   設定確認→最新SHA照合→生成設定→既存DBのマイグレーション→Worker公開を順に行う。
-   実行中のデプロイは新しいpushでキャンセルしない。承認後の実行中はmainの更新を控える。
-4. 公開後はB/Cの疎通と[実機確認](manual-test.md)を人間が実施する。実値やCLI出力は外部へ貼らない。
-   エージェントのローカル/PR検査成功は本番承認・実デプロイ成功の代わりではない。
+4. deployの成功を確認する。承認したコミットの取得 → ツール導入 → 設定確認 → 最新mainとの照合 →
+   設定生成 → D1マイグレーション → Worker公開の順で実行される。
+   実行中は別のPRのマージを控える。新しいpushでは実行中のデプロイを自動キャンセルしない。
+5. LINEで `ヘルプ`、リマインダー登録・一覧・取消・発火を確認する。詳細は[実機確認](manual-test.md)。
+   必要なら手元で `wr tail --config wrangler.generated.toml` を使う。実値やCLI出力を外部へ貼らない。
 
-### 失敗・停止
+以後はPRをmainへマージするたびに、検査成功後のこの承認操作から進める。
+公式: [デプロイの承認](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments)。
 
-- 設定不足・古いSHAならリモート操作前に停止。最新mainの正常な実行を確認する。
-- D1移行失敗ならWorkerを公開しない。人間が手元で移行状態を確認し、互換性と原因を調べる。
-- 移行成功後の公開失敗ではDBを自動で巻き戻さない。最新SHAと互換性を確認後、同じ実行を再実行/再承認する。
-- CLI出力はIDやWorker URLを含み得るためActionsログ/成果物へ出さない。固定エラーだけを表示し、一時出力と生成設定は削除する。
-- 自動更新を止めるにはRepository variableをfalseにし、既に承認待ちの実行も人間が却下/キャンセルする。
-  実行中の移行/公開を途中で中断する判断は人間が行う。無効化は進行中の操作を巻き戻さない。
+### 7. 進まない場合・停止する場合
+
+| 表示・状態 | 対応 |
+|---|---|
+| deployが `Skipped` | Repository variableの名前・小文字の `true`・push/mainの実行か・前段検査の成功を確認し、F-5で全ジョブを再実行する |
+| `Review deployments` がない | 検査中・スキップ・既に承認済みかを確認する。承認なしで実行が始まるならproductionのRequired reviewers設定を確認する |
+| 自分で承認できない | productionの承認者に自分が登録され、1人運用ならPrevent self-reviewがオフか確認する |
+| `Deployment configuration is missing` | productionの3つのEnvironment secretsの名前と空でないことを確認する |
+| `Approved revision is no longer the main tip` | 最新mainの実行を選ぶ。古いコミットを繰り返し再実行しない |
+| `D1 migration failed; Worker was not published` | Workerは未更新。上記の未対応引数が残っていないか、D1権限・対象DB・移行状態を人間が手元で確認する |
+| `Worker publication failed` | DB移行は成功している可能性がある。DBは自動で巻き戻さず、原因とコード互換性を確認する |
+
+CLI出力はIDやWorker URLを含み得るためActionsログ・artifactへ出さず、一時出力と生成設定は削除する。
+原因調査は人間が手元で行い、設定や権限の修正後、対象が最新mainであることを確認して再実行・再承認する。
+ワークフロー自体を修正した場合は修正をマージし、新しいコミットの実行を使う。
+
+停止するにはRepository variable `ENABLE_PRODUCTION_DEPLOY` を `false` にし、既に承認待ちの実行も却下・キャンセルする。
+変数変更は進行中の操作を止めたり巻き戻したりしない。実行中の移行・公開を中断する判断は人間が行う。
 
 ### 人間の確認記録（値は記録しない）
 
-- production required reviewers・main限定・Secret登録・main保護: 未実施/OK/NG。
+- production required reviewers・main限定・Secret登録・main保護・Repository variable: 未実施/OK/NG。
 - mainマージ後の検査成功、承認前の停止、承認後の更新、PR時スキップ: 未実施/OK/NG。
 - 公開後の実LINE・Cron確認: 未実施/OK/NG。対象SHAと固定エラーコードだけを記録する。
