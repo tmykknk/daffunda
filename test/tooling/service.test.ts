@@ -61,13 +61,12 @@ test("DBエラーは成功返信へ変換せず呼び出し元へ伝える", asy
   ).rejects.toThrow("DBに触れてはいけません");
 });
 
-test("ボタン付きserviceも雑談を無視し、日時エラーにはボタンを付けない", async () => {
+test("serviceは雑談を無視し、日時エラーはテキストだけ返す", async () => {
   unavailable.mockClear();
   const input = { groupId: "C_test_group_1", userId: null, now };
   expect(await handleReply({ ...input, text: "テスト雑談" }, repos)).toBeNull();
-  expect(await handleReply({ ...input, text: "/テスト 昨日" }, repos)).toEqual({
-    text: "過去の日時は登録できません",
-    actions: [],
-  });
+  expect(await handleReply({ ...input, text: "/テスト 昨日" }, repos)).toBe(
+    "過去の日時は登録できません",
+  );
   expect(unavailable).not.toHaveBeenCalled();
 });

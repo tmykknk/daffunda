@@ -66,8 +66,8 @@ export const HTTP_STATUS = Object.freeze({
 });
 
 export const REMINDER_ACTION_PREFIX = "reminder:v1:";
-export const REMINDER_PAGE_SIZE = 10;
+export const REMINDER_PAGE_SIZE = 5;
 export const REMINDER_PREVIEW_LENGTH = 300;
 // 公式「ポストバックアクション」「ラベルの仕様（Flex Message）」。
 export const MAX_POSTBACK_DATA_LENGTH = 300;
-export const MAX_FLEX_ACTION_LABEL_LENGTH = 40;
+export const REMINDER_CONTENT_MAX_LINES = 2;

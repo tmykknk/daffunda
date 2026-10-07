@@ -1,13 +1,12 @@
 import { normalizeName } from "../domain/normalize";
 import { parse } from "../domain/parser";
 import { parseReminder } from "../domain/reminder-parse";
+import type { Reply } from "../domain/reply";
 import { MESSAGES, REPLY_TEXT } from "../messages";
 import type { createItemsRepo } from "../repo/items";
 import type { createRemindersRepo } from "../repo/reminders";
 import {
-  type ButtonReply,
   boundedList,
-  cancelButton,
   formatTokyoTime,
   registrationReply,
   reminderPageReply,
@@ -74,10 +73,9 @@ async function registerReminder(
   raw: string,
   input: Request,
   repo: Repositories["reminders"],
-): Promise<ButtonReply> {
+): Promise<string> {
   const parsed = parseReminder(raw, input.now);
-  if (!parsed.ok)
-    return { text: MESSAGES.reminderErrors[parsed.code], actions: [] };
+  if (!parsed.ok) return MESSAGES.reminderErrors[parsed.code];
   const row = await repo.create({
     groupId: input.groupId,
     content: parsed.content,
@@ -86,14 +84,7 @@ async function registerReminder(
     retryKey: null,
     now: input.now,
   });
-  return {
-    text: registrationReply(
-      row.id,
-      formatTokyoTime(row.remind_at),
-      row.content,
-    ),
-    actions: [cancelButton(row.id)],
-  };
+  return registrationReply(row.id, formatTokyoTime(row.remind_at), row.content);
 }
 
 async function listItems(
@@ -144,7 +135,7 @@ async function executeCommand(
     case "remind_list":
       return listReminders(input.groupId, repos.reminders);
     case "reminder":
-      return (await registerReminder(command.raw, input, repos.reminders)).text;
+      return registerReminder(command.raw, input, repos.reminders);
     case "remind_delete":
       return cancelReminder(command.id, input, repos.reminders);
     case "help":
@@ -172,15 +163,12 @@ export function handleText(
 export async function handleReply(
   input: Request,
   repos: Repositories,
-): Promise<ButtonReply | null> {
+): Promise<Reply | null> {
   const command = parse(input.text);
-  if (command.type === "reminder")
-    return registerReminder(command.raw, input, repos.reminders);
   if (command.type === "remind_list")
     return reminderPageReply(
       await repos.reminders.listUnsent(input.groupId),
       0,
     );
-  const text = await executeCommand(command, input, repos);
-  return text ? { text, actions: [] } : null;
+  return executeCommand(command, input, repos);
 }

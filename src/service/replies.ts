@@ -6,8 +6,7 @@ import {
   TOKYO_OFFSET_MINUTES,
   WEEKDAY_NAMES,
 } from "../constants";
-import { reminderActionData } from "../domain/reminder-action";
-import type { PostbackAction } from "../line/reply";
+import type { Reply } from "../domain/reply";
 import { MESSAGES, REPLY_TEXT } from "../messages";
 
 export function formatTokyoTime(instant: string): string {
@@ -70,42 +69,21 @@ export function reminderPushText(content: string): string {
   );
 }
 
-export type ButtonReply = Readonly<{
-  text: string;
-  actions: readonly PostbackAction[];
-}>;
-
-export function cancelButton(id: number): PostbackAction {
-  return {
-    label: REPLY_TEXT.cancelButton(id),
-    data: reminderActionData({ type: "cancel", id }),
-  };
-}
-
 export function reminderPageReply(
   rows: readonly Readonly<{ id: number; remind_at: string; content: string }>[],
   offset: number,
-): ButtonReply {
+): Reply {
   const page = rows.slice(offset, offset + REMINDER_PAGE_SIZE);
-  const text = page
-    .map((row) =>
-      REPLY_TEXT.reminder(
-        row.id,
-        formatTokyoTime(row.remind_at),
-        shortenContent(row.content, REMINDER_PREVIEW_LENGTH),
-      ),
-    )
-    .join("\n");
-  const actions = page.map((row) => cancelButton(row.id));
+  if (!page.length)
+    return offset ? MESSAGES.emptyReminderPage : MESSAGES.emptyReminders;
   const next = offset + page.length;
-  if (next < rows.length)
-    actions.push({
-      label: REPLY_TEXT.nextReminderPage,
-      data: reminderActionData({ type: "page", offset: next }),
-    });
   return {
-    text:
-      text || (offset ? MESSAGES.emptyReminderPage : MESSAGES.emptyReminders),
-    actions,
+    type: "reminder_list",
+    reminders: page.map((row) => ({
+      id: row.id,
+      time: formatTokyoTime(row.remind_at),
+      content: shortenContent(row.content, REMINDER_PREVIEW_LENGTH),
+    })),
+    nextOffset: next < rows.length ? next : null,
   };
 }

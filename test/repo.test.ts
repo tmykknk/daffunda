@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import worker, { createApp, createScheduled } from "../src/index";
 import { createPushClient } from "../src/line/push";
-import type { createReplyClient } from "../src/line/reply";
+import { createReplyClient } from "../src/line/reply";
 import { createItemsRepo } from "../src/repo/items";
 import { createEventsRepo } from "../src/repo/processed-events";
 import { createRemindersRepo } from "../src/repo/reminders";
@@ -525,7 +525,6 @@ test("許可groupのテキストは保存し、同時再送でも登録と返信
     "test-access-token",
     "test-reply-token",
     "登録 #1: テスト → 10/4(日) 15:00\n取消: リマインド削除 1",
-    [{ label: "取消 #1", data: "reminder:v1:cancel:1" }],
   );
 });
 test("イベント記録後の業務SQL失敗は全体を戻し、再送で欠落なく処理できる", async () => {
@@ -1196,7 +1195,7 @@ function buttonEvent(
 }
 
 // 公式「Flex Message」「ポストバックアクション」「ポストバックイベント」。
-test("登録確認と一覧の取消ボタンは同じ内部IDを保持する", async () => {
+test("登録確認はテキストで、一覧と取消対象は同じ内部IDを保持する", async () => {
   expect(
     (
       await postEvents([
@@ -1206,16 +1205,19 @@ test("登録確認と一覧の取消ボタンは同じ内部IDを保持する", 
   ).toBe(200);
   const [row] = await reminders().listUnsent(group);
   if (!row) throw new Error("登録失敗");
-  const action = {
-    label: `取消 #${row.id}`,
-    data: `reminder:v1:cancel:${row.id}`,
-  };
-  expect(lineReply.mock.calls[0]?.[3]).toEqual([action]);
+  expect(lineReply.mock.calls[0]).toHaveLength(3);
+  expect(typeof lineReply.mock.calls[0]?.[2]).toBe("string");
   expect(
     (await postEvents([textEvent("リマインド", "test-button-list")])).status,
   ).toBe(200);
-  expect(lineReply.mock.calls[1]?.[3]).toEqual([action]);
-  expect((await postEvents([buttonEvent(action.data)])).status).toBe(200);
+  expect(lineReply.mock.calls[1]?.[2]).toEqual({
+    type: "reminder_list",
+    reminders: [{ id: row.id, content: row.content, time: "10/4(日) 09:00" }],
+    nextOffset: null,
+  });
+  expect(
+    (await postEvents([buttonEvent(`reminder:v1:cancel:${row.id}`)])).status,
+  ).toBe(200);
   expect(await reminders().listUnsent(group)).toEqual([]);
   expect(lineReply.mock.calls[2]?.[2]).toBe(`取消: #${row.id}`);
 });
@@ -1280,18 +1282,20 @@ test("一覧はページ分けして全予定へ取消ボタンを付け、一�
   for (let i = 0; i < 11; i++)
     await register(`ページテスト${i}`, new Date(now.getTime() + i * 60_000));
   await postEvents([textEvent("リマインド", "test-first-page")]);
-  const actions = lineReply.mock.calls[0]?.[3];
-  expect(actions).toHaveLength(11);
-  expect(actions?.[10]).toEqual({
-    label: "次のページ",
-    data: "reminder:v1:page:10",
+  expect(lineReply.mock.calls[0]?.[2]).toMatchObject({
+    nextOffset: 5,
+    reminders: [1, 2, 3, 4, 5].map((id) => ({ id })),
   });
-  await postEvents([buttonEvent("reminder:v1:page:10", "test-next-page")]);
-  expect(lineReply.mock.calls[1]?.[3]).toEqual([
-    { label: "取消 #11", data: "reminder:v1:cancel:11" },
-  ]);
-  expect(lineReply.mock.calls[1]?.[2]).toContain("#11");
-  expect(lineReply.mock.calls[1]?.[2]).not.toContain("#1 ");
+  await postEvents([buttonEvent("reminder:v1:page:5", "test-next-page")]);
+  expect(lineReply.mock.calls[1]?.[2]).toMatchObject({
+    nextOffset: 10,
+    reminders: [6, 7, 8, 9, 10].map((id) => ({ id })),
+  });
+  await postEvents([buttonEvent("reminder:v1:page:10", "test-last-page")]);
+  expect(lineReply.mock.calls[2]?.[2]).toMatchObject({
+    nextOffset: null,
+    reminders: [{ id: 11 }],
+  });
 });
 
 test("不正・欠落postback、standby、別source、許可未設定は業務処理しない", async () => {
@@ -1352,10 +1356,14 @@ test("ボタン一覧の長文・空ページ・空一覧でも上限と対象ID
   expect(lineReply.mock.calls[0]?.[2]).toBe("未送信リマインダーはありません");
   for (let i = 0; i < 10; i++) await register("😀".repeat(3000));
   await postEvents([textEvent("リマインド", "test-long-buttons")]);
-  const text = lineReply.mock.calls[1]?.[2] ?? "";
-  expect(text.length).toBeLessThanOrEqual(5000);
-  expect(text).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/u);
-  expect(lineReply.mock.calls[1]?.[3]).toHaveLength(10);
+  const list = lineReply.mock.calls[1]?.[2];
+  if (!list || typeof list === "string") throw new Error("一覧なし");
+  expect(list.reminders).toHaveLength(5);
+  expect(list.nextOffset).toBe(5);
+  for (const row of list.reminders) {
+    expect(row.content.length).toBeLessThanOrEqual(300);
+    expect(row.content).toMatch(/^(😀)+…$/u);
+  }
   expect((await reminders().listUnsent(group))[0]?.content.length).toBe(6000);
   await postEvents([
     buttonEvent("reminder:v1:page:9007199254740991", "test-empty-page"),
@@ -1372,9 +1380,11 @@ test("長い内部IDもボタンへそのまま保持し、手入力なしで取
     .bind(id, row.id)
     .run();
   await postEvents([textEvent("リマインド", "test-long-id-list")]);
-  expect(lineReply.mock.calls[0]?.[3]).toEqual([
-    { label: `取消 #${id}`, data: `reminder:v1:cancel:${id}` },
-  ]);
+  expect(lineReply.mock.calls[0]?.[2]).toMatchObject({
+    type: "reminder_list",
+    reminders: [{ id }],
+    nextOffset: null,
+  });
   await postEvents([
     buttonEvent(`reminder:v1:cancel:${id}`, "test-long-id-cancel"),
   ]);
@@ -1434,4 +1444,95 @@ test("異なるイベントの二重タップは取消成功と取消済みを�
     [`取消: #${row.id}`, `すでに取消済みです: #${row.id}`].sort(),
   );
   expect(await reminders().listUnsent(group)).toEqual([]);
+});
+
+test.each([0, 1, 5, 6, 11])(
+  "I2一覧は日時順の構造化5件ページを返す: %i件",
+  async (count) => {
+    for (let index = count - 1; index >= 0; index--)
+      await register(
+        `UIテスト${index}`,
+        new Date(now.getTime() + index * 60_000),
+      );
+    await postEvents([textEvent("リマインド", "test-i2-list")]);
+    const rows = await reminders().listUnsent(group);
+    const expected = rows.slice(0, 5).map((row) => ({
+      id: row.id,
+      content: row.content,
+      time: `10/3(土) 12:${String(count - row.id).padStart(2, "0")}`,
+    }));
+    expect(lineReply).toHaveBeenCalledExactlyOnceWith(
+      "test-access-token",
+      "test-reply-token",
+      count
+        ? {
+            type: "reminder_list",
+            reminders: expected,
+            nextOffset: count > 5 ? 5 : null,
+          }
+        : "未送信リマインダーはありません",
+    );
+  },
+);
+
+test("I2登録と取消は結果テキストだけで、一覧は自動再送しない", async () => {
+  await postEvents([textEvent("/UIテスト 明日", "test-i2-register")]);
+  expect(lineReply).toHaveBeenCalledExactlyOnceWith(
+    "test-access-token",
+    "test-reply-token",
+    "登録 #1: UIテスト → 10/4(日) 09:00\n取消: リマインド削除 1",
+  );
+  lineReply.mockClear();
+  await postEvents([buttonEvent("reminder:v1:cancel:1", "test-i2-cancel")]);
+  expect(lineReply).toHaveBeenCalledExactlyOnceWith(
+    "test-access-token",
+    "test-reply-token",
+    "取消: #1",
+  );
+});
+
+test("I2はWebhookからReplyの単一Flexまで内容・日時・対象IDを維持する", async () => {
+  for (let index = 6; index >= 1; index--)
+    await register(
+      `😀一覧テスト #999 ${index}\n2行目\n3行目`,
+      new Date(now.getTime() + index * 60_000),
+    );
+  await register("他所属は非表示", now, otherGroup);
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
+    async () => ({ ok: true, status: 200 }),
+  );
+  lineReply.mockImplementationOnce(createReplyClient(fetcher));
+  expect(
+    (await postEvents([textEvent("リマインド", "test-i2-flex")])).status,
+  ).toBe(200);
+  const body = fetcher.mock.calls[0]?.[1].body;
+  if (!body) throw new Error("送信なし");
+  const rows = (await reminders().listUnsent(group)).slice(0, 5);
+  expect(JSON.parse(body)).toMatchObject({
+    messages: [
+      {
+        type: "flex",
+        contents: {
+          body: {
+            contents: rows.map((row, index) => ({
+              contents: [
+                { type: "text", text: row.content, wrap: true, maxLines: 2 },
+                { type: "text", text: `10/3(土) 12:0${index + 1}` },
+                { type: "text", text: `#${row.id}` },
+                {
+                  type: "button",
+                  action: {
+                    label: "取消",
+                    data: `reminder:v1:cancel:${row.id}`,
+                  },
+                },
+              ],
+            })),
+          },
+          footer: { contents: [{ action: { data: "reminder:v1:page:5" } }] },
+        },
+      },
+    ],
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

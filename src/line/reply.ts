@@ -1,42 +1,86 @@
 import {
   LINE_ENDPOINTS,
-  MAX_FLEX_ACTION_LABEL_LENGTH,
-  MAX_POSTBACK_DATA_LENGTH,
   MAX_TEXT_MESSAGE_LENGTH,
+  REMINDER_CONTENT_MAX_LINES,
   REMINDER_PAGE_SIZE,
+  REMINDER_PREVIEW_LENGTH,
 } from "../constants";
-
+import { reminderActionData } from "../domain/reminder-action";
+import type { ReminderListReply, Reply } from "../domain/reply";
 import { REPLY_TEXT } from "../messages";
 
-export type PostbackAction = Readonly<{ label: string; data: string }>;
+function postbackButton(label: string, data: string) {
+  return {
+    type: "button",
+    height: "sm",
+    action: { type: "postback", label, data },
+  };
+}
 
-// 公式「Flex Message」「バブル」「ボックス」「ボタン」「ポストバックアクション」。
-function cancellationButtons(actions: readonly PostbackAction[]) {
+// 公式「Flex Message」「バブル」「ボックス」「テキスト（wrap/maxLines）」「ポストバックアクション」。
+function reminderListMessage(reply: ReminderListReply) {
   if (
-    actions.length > REMINDER_PAGE_SIZE + 1 ||
-    actions.some(
-      (action) =>
-        !action.label ||
-        action.label.length > MAX_FLEX_ACTION_LABEL_LENGTH ||
-        !action.data ||
-        action.data.length > MAX_POSTBACK_DATA_LENGTH,
-    )
+    !reply.reminders.length ||
+    reply.reminders.length > REMINDER_PAGE_SIZE ||
+    reply.reminders.some(
+      (row) =>
+        !Number.isSafeInteger(row.id) ||
+        row.id <= 0 ||
+        !row.content ||
+        row.content.length > REMINDER_PREVIEW_LENGTH ||
+        !row.time ||
+        row.time.length > REMINDER_PREVIEW_LENGTH,
+    ) ||
+    (reply.nextOffset !== null &&
+      (!Number.isSafeInteger(reply.nextOffset) || reply.nextOffset < 0))
   )
     throw new Error("LINE_REPLY_INVALID");
   return {
     type: "flex",
-    altText: REPLY_TEXT.cancelButtonsTitle,
+    altText: REPLY_TEXT.reminderListTitle,
     contents: {
       type: "bubble",
       body: {
         type: "box",
         layout: "vertical",
-        contents: actions.map((action) => ({
-          type: "button",
-          height: "sm",
-          action: { type: "postback", label: action.label, data: action.data },
+        spacing: "md",
+        contents: reply.reminders.map((row) => ({
+          type: "box",
+          layout: "vertical",
+          spacing: "sm",
+          contents: [
+            {
+              type: "text",
+              text: row.content,
+              wrap: true,
+              maxLines: REMINDER_CONTENT_MAX_LINES,
+            },
+            { type: "text", text: row.time, wrap: true },
+            { type: "text", text: REPLY_TEXT.reminderId(row.id), wrap: true },
+            postbackButton(
+              REPLY_TEXT.cancelButton,
+              reminderActionData({ type: "cancel", id: row.id }),
+            ),
+          ],
         })),
       },
+      ...(reply.nextOffset === null
+        ? {}
+        : {
+            footer: {
+              type: "box",
+              layout: "vertical",
+              contents: [
+                postbackButton(
+                  REPLY_TEXT.nextReminderPage,
+                  reminderActionData({
+                    type: "page",
+                    offset: reply.nextOffset,
+                  }),
+                ),
+              ],
+            },
+          }),
     },
   };
 }
@@ -49,27 +93,31 @@ type Fetcher = (
     body: string;
   }>,
 ) => Promise<Readonly<{ ok: boolean; status: number }>>;
-// 公式「応答メッセージを送る」: tokenは1回、受信後速やかに使う。自動再試行しない。
+// 公式「応答メッセージを送る」: tokenは1回、受信後速やかに使う。返信は1メッセージ。
 export function createReplyClient(fetcher: Fetcher = fetch) {
   return async (
     token: string,
     replyToken: string,
-    text: string,
-    actions: readonly PostbackAction[] = [],
+    reply: Reply,
   ): Promise<void> => {
-    if (!token || !replyToken || !text || text.length > MAX_TEXT_MESSAGE_LENGTH)
+    if (
+      !token ||
+      !replyToken ||
+      !reply ||
+      (typeof reply === "string" && reply.length > MAX_TEXT_MESSAGE_LENGTH)
+    )
       throw new Error("LINE_REPLY_INVALID");
-    const messages = [
-      { type: "text", text },
-      ...(actions.length ? [cancellationButtons(actions)] : []),
-    ];
+    const message =
+      typeof reply === "string"
+        ? { type: "text", text: reply }
+        : reminderListMessage(reply);
     const response = await fetcher(LINE_ENDPOINTS.reply, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ replyToken, messages }),
+      body: JSON.stringify({ replyToken, messages: [message] }),
     });
     if (!response.ok) throw new Error(`LINE_REPLY_FAILED:${response.status}`);
   };

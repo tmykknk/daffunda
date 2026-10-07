@@ -117,76 +117,127 @@ test("Pushは空欄・不正UUID・文字数上限をfetch前に拒否する", a
   expect(fetcher).not.toHaveBeenCalled();
 });
 
-// 公式「Flex Message」「バブル」「ボックス」「ボタン」「ポストバックアクション」。
-test("Replyは既存textと取消Flexを同じリクエストで送り、displayTextを付けない", async () => {
-  const fetcher = vi.fn(async () => ({ ok: true, status: 200 }));
-  await createReplyClient(fetcher)(
-    "test-token",
-    "test-reply",
-    "登録 #1: テスト",
-    [{ label: "取消 #1", data: "reminder:v1:cancel:1" }],
+test("Flexは5件と最大内部IDを通し、上限・不正値は送信前に拒否する", async () => {
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
+    async () => ({ ok: true, status: 200 }),
   );
-  expect(fetcher).toHaveBeenCalledWith(
-    "https://api.line.me/v2/bot/message/reply",
-    expect.objectContaining({
-      body: JSON.stringify({
-        replyToken: "test-reply",
-        messages: [
-          { type: "text", text: "登録 #1: テスト" },
-          {
-            type: "flex",
-            altText: "取消する予定を選んでください",
-            contents: {
-              type: "bubble",
-              body: {
+  const reply = createReplyClient(fetcher);
+  const row = {
+    id: 9007199254740991,
+    content: "\n".repeat(300),
+    time: "10/4(日) 09:00",
+  };
+  const list = {
+    type: "reminder_list",
+    reminders: Array.from({ length: 5 }, () => row),
+    nextOffset: null,
+  } satisfies Parameters<typeof reply>[2];
+  await reply("test-token", "test-reply", list);
+  const body = fetcher.mock.calls[0]?.[1].body;
+  if (!body) throw new Error("送信なし");
+  expect(new TextEncoder().encode(body).byteLength).toBeLessThan(30_000);
+  expect(JSON.parse(body)).toMatchObject({
+    messages: [{ contents: { body: { contents: expect.any(Array) } } }],
+  });
+  expect(body).not.toContain("footer");
+  fetcher.mockClear();
+  for (const reminders of [
+    [],
+    Array.from({ length: 6 }, () => row),
+    ...[
+      { ...row, id: 0 },
+      { ...row, id: 1.5 },
+      { ...row, id: Number.MAX_SAFE_INTEGER + 1 },
+      { ...row, content: "" },
+      { ...row, content: "あ".repeat(301) },
+      { ...row, time: "" },
+      { ...row, time: "あ".repeat(301) },
+    ].map((invalid) => [invalid]),
+  ])
+    await expect(
+      reply("test-token", "test-reply", { ...list, reminders }),
+    ).rejects.toThrow("LINE_REPLY_INVALID");
+  for (const nextOffset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
+    await expect(
+      reply("test-token", "test-reply", { ...list, nextOffset }),
+    ).rejects.toThrow("LINE_REPLY_INVALID");
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+// 公式「Flex Message」「テキスト（wrap/maxLines）」「ポストバックアクション」。
+test("I2一覧は内容・日時・ID・取消と次ページを一つのFlexに保持する", async () => {
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
+    async () => ({ ok: true, status: 200 }),
+  );
+  await createReplyClient(fetcher)("test-token", "test-reply", {
+    type: "reminder_list",
+    reminders: [
+      {
+        id: 9007199254740991,
+        content: "😀テスト\n2行目\n3行目",
+        time: "10/4(日) 09:00",
+      },
+    ],
+    nextOffset: 5,
+  });
+  const body = fetcher.mock.calls[0]?.[1].body;
+  if (!body) throw new Error("送信なし");
+  expect(JSON.parse(body)).toEqual({
+    replyToken: "test-reply",
+    messages: [
+      {
+        type: "flex",
+        altText: "未送信リマインダー一覧",
+        contents: {
+          type: "bubble",
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            contents: [
+              {
                 type: "box",
                 layout: "vertical",
+                spacing: "sm",
                 contents: [
+                  {
+                    type: "text",
+                    text: "😀テスト\n2行目\n3行目",
+                    wrap: true,
+                    maxLines: 2,
+                  },
+                  { type: "text", text: "10/4(日) 09:00", wrap: true },
+                  { type: "text", text: "#9007199254740991", wrap: true },
                   {
                     type: "button",
                     height: "sm",
                     action: {
                       type: "postback",
-                      label: "取消 #1",
-                      data: "reminder:v1:cancel:1",
+                      label: "取消",
+                      data: "reminder:v1:cancel:9007199254740991",
                     },
                   },
                 ],
               },
-            },
+            ],
           },
-        ],
-      }),
-    }),
-  );
-});
-
-test("Flexのラベル40・data300・11ボタンを通し、超過と空値は送信前に拒否する", async () => {
-  const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
-    async () => ({ ok: true, status: 200 }),
-  );
-  const reply = createReplyClient(fetcher);
-  const action = { label: "あ".repeat(40), data: "\n".repeat(300) };
-  await reply(
-    "test-token",
-    "test-reply",
-    "テスト",
-    Array.from({ length: 11 }, () => action),
-  );
-  expect(fetcher).toHaveBeenCalledTimes(1);
-  const body = fetcher.mock.calls[0]?.[1]?.body;
-  if (!body) throw new Error("送信なし");
-  expect(new TextEncoder().encode(body).byteLength).toBeLessThan(30_000);
-  fetcher.mockClear();
-  for (const actions of [
-    [{ ...action, label: "" }],
-    [{ ...action, label: "あ".repeat(41) }],
-    [{ ...action, data: "" }],
-    [{ ...action, data: "あ".repeat(301) }],
-    Array.from({ length: 12 }, () => action),
-  ])
-    await expect(
-      reply("test-token", "test-reply", "テスト", actions),
-    ).rejects.toThrow("LINE_REPLY_INVALID");
-  expect(fetcher).not.toHaveBeenCalled();
+          footer: {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              {
+                type: "button",
+                height: "sm",
+                action: {
+                  type: "postback",
+                  label: "次のページ",
+                  data: "reminder:v1:page:5",
+                },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  });
 });
