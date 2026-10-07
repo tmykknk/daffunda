@@ -69,7 +69,7 @@ jobs:
             exit 1
           fi
           sh scripts/gen-wrangler-config.sh
-          if ! pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.generated.toml --yes > "$RUNNER_TEMP/migrations.log" 2>&1; then
+          if ! pnpm exec wrangler d1 migrations apply DB --remote --config wrangler.generated.toml > "$RUNNER_TEMP/migrations.log" 2>&1; then
             echo "::error::D1 migration failed; Worker was not published"
             exit 1
           fi
