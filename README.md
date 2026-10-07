@@ -220,7 +220,7 @@ TZ=Asia/Tokyo mise exec -- pnpm check
 - `#番号`は内部IDです。空の一覧でもリセット・再利用しません。登録確認・一覧の取消ボタンから手入力なしで取り消せます。「リマインド削除 N」も使えます。
 - Cronは5分超の送信滞留を復旧し、同じ再試行キーで再送します。Push失敗は最大3回、初回claimから24時間以降は重複防止のため停止します。`sent`はLINEの受理を表し、端末への配送保証ではありません。送信開始済みのPushは取消で巻き戻せません。
 - DB更新はイベント記録と原子的ですが、Reply送信とは原子的ではありません。更新成功後に返信だけ失敗する可能性があります。一覧の内容・長い返信・Pushは表示用に省略し、DBの内容は保持します。「次のページ」で続き、途中の追加・取消後は「リマインド」で更新してください。
-- デプロイは人間が手元で行います。公開前に[公開チェックリスト](docs/publish-checklist.md)を確認してください。
+- デプロイは人間が手元で行います。公開前に[レビューチェックリスト](docs/review-checklist.md)を確認してください。
 
 [設計判断と既知の制約](docs/decisions.md)・[タスク](docs/tasks.md)・[開発規約](docs/conventions.md)・[検査仕様](docs/tooling.md)・[レビュー基準](docs/review-checklist.md)。ライセンスは[MIT](LICENSE)です。
 
@@ -281,4 +281,4 @@ Only the allowed group is processed by Webhook and the minute-based Cron. Missin
 
 Reminder numbers are internal IDs and are not reset/reused when the list becomes empty. Confirmation/list messages have cancellation buttons that retain the internal ID. The text cancellation command remains available. Cron recovers sending entries after more than five minutes and reuses the same retry key. Push failures stop after three attempts; retries stop 24 hours after the first claim to avoid duplicates. LINE acceptance does not guarantee delivery. Cancellation cannot undo an already-started Push. Event records and business updates are atomic, but Reply delivery is separate and can fail after the update succeeds. List previews and long messages are shortened without changing stored content. Use the next-page button, or refresh with `リマインド` after adding/canceling entries.
 
-Deployment is manual. See [decisions and limitations](docs/decisions.md), [tasks](docs/tasks.md), [conventions](docs/conventions.md), [tooling](docs/tooling.md), [review checks](docs/review-checklist.md), and the [publication checklist](docs/publish-checklist.md). Licensed under [MIT](LICENSE).
+Deployment is manual. See [decisions and limitations](docs/decisions.md), [tasks](docs/tasks.md), [conventions](docs/conventions.md), [tooling](docs/tooling.md), [review checks](docs/review-checklist.md), and the [pre-PR checklist](docs/review-checklist.md). Licensed under [MIT](LICENSE).
