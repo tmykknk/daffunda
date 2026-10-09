@@ -353,7 +353,14 @@ test("serviceの削除は入力表示名で結果を分け、照合別名でも1
 test("serviceの買い物一覧は追加順で表示し、空・かなコマンド・グループ分離を扱う", async () => {
   expect(await reply("リスト")).toBe("リストは空です");
   await reply("+テスト品目2 テスト品目1");
-  expect(await reply("りすと")).toBe("・テスト品目2\n・テスト品目1");
+  expect(await reply("りすと")).toEqual({
+    type: "item_list",
+    items: [
+      { id: 1, name: "テスト品目2" },
+      { id: 2, name: "テスト品目1" },
+    ],
+    nextOffset: null,
+  });
   expect(await reply("リスト", otherGroup)).toBe("リストは空です");
 });
 
@@ -403,23 +410,17 @@ test("serviceは既存の同名複数行を入力件数分だけ削除する", a
   expect(await items().list(group)).toEqual([]);
 });
 
-test("serviceの長い買い物一覧は行を省略し、件数とUTF-16上限を保つ", async () => {
+test("serviceの長い買い物一覧は5件にページ分けし、DBの品目を保持する", async () => {
   const names = Array.from(
     { length: 100 },
     (_, index) => `${index}${"😀".repeat(40)}`,
   );
-  await items().add(group, names, null, now);
-  const response = await reply("リスト");
-  if (typeof response !== "string")
-    throw new Error("テキスト返信ではありません");
-  const included = response.split("\n").length - 1;
-  expect(response.length).toBeLessThanOrEqual(5000);
-  expect(response).toBe(
-    [
-      ...names.slice(0, included).map((name) => `・${name}`),
-      `…他${names.length - included}件`,
-    ].join("\n"),
-  );
+  const rows = await items().add(group, names, null, now);
+  expect(await reply("リスト")).toEqual({
+    type: "item_list",
+    items: rows.slice(0, 5).map(({ id, name }) => ({ id, name })),
+    nextOffset: 5,
+  });
   expect(await items().list(group)).toHaveLength(100);
 });
 
@@ -1384,7 +1385,8 @@ test("ボタン一覧の長文・空ページ・空一覧でも上限と対象ID
   for (let i = 0; i < 10; i++) await register("😀".repeat(3000));
   await postEvents([textEvent("リマインド", "test-long-buttons")]);
   const list = lineReply.mock.calls[1]?.[2];
-  if (!list || typeof list === "string") throw new Error("一覧なし");
+  if (!list || typeof list === "string" || list.type !== "reminder_list")
+    throw new Error("一覧なし");
   expect(list.reminders).toHaveLength(5);
   expect(list.nextOffset).toBe(5);
   for (const row of list.reminders) {

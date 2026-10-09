@@ -1,0 +1,34 @@
+{
+  "valid": [
+    {
+      "data": "item:v1:remove:1",
+      "expect": { "type": "remove_item", "id": 1 }
+    },
+    {
+      "data": "item:v1:remove:9007199254740991",
+      "expect": { "type": "remove_item", "id": 9007199254740991 }
+    },
+    {
+      "data": "item:v1:page:0",
+      "expect": { "type": "item_page", "offset": 0 }
+    },
+    { "data": "item:v1:page:5", "expect": { "type": "item_page", "offset": 5 } }
+  ],
+  "invalid": [
+    "",
+    "reminder:v1:cancel:1",
+    "item:v2:remove:1",
+    "item:v1:remove:0",
+    "item:v1:remove:-1",
+    "item:v1:remove:01",
+    "item:v1:remove:1.5",
+    "item:v1:remove:9007199254740992",
+    "item:v1:remove:１",
+    "item:v1:remove:+1",
+    "item:v1:remove:1:2",
+    "item:v1:remove:",
+    "item:v1:page:-1",
+    "item:v1:page:01",
+    "item:v1:cancel:1"
+  ]
+}

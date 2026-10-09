@@ -12,7 +12,12 @@ const unavailable = vi.fn((): never => {
   throw new Error("DBに触れてはいけません");
 });
 const repos = {
-  items: { add: unavailable, remove: unavailable, list: unavailable },
+  items: {
+    add: unavailable,
+    remove: unavailable,
+    list: unavailable,
+    removeForButton: unavailable,
+  },
   reminders: {
     create: unavailable,
     listUnsent: unavailable,
