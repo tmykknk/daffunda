@@ -53,8 +53,6 @@ function expandExpectation(cell: string): unknown {
     }
     case "usage":
       return { type, command: JSON.parse(cell.slice("usage ".length)) };
-    case "remind_delete":
-      return { type, id: Number(cell.slice("remind_delete ".length)) };
     case "reminder":
       return { type, raw: JSON.parse(cell.slice("reminder raw=".length)) };
     case "list":
@@ -131,12 +129,9 @@ test("予約語は追加でのみ拒否し、該当語を入力順にまとめ�
 });
 
 test.each(["0", "-1", "+3", "3.0", "3e1", "3abc", "3 4", "9007199254740992"])(
-  "取消IDの不正な引数を拒否する: %s",
+  "廃止した取消コマンドの不正引数を無視する: %s",
   (argument) => {
-    expect(parse(`リマインド削除 ${argument}`)).toEqual({
-      type: "usage",
-      command: "remind_delete",
-    });
+    expect(parse(`リマインド削除 ${argument}`)).toEqual({ type: "ignore" });
   },
 );
 
@@ -145,15 +140,12 @@ test.each([
   "リマインド削除\t3",
   "リマインド削除\n3",
   "リマインド削除 003",
-])("正規化した正の整数の取消IDを受け付ける: %s", (input) => {
-  expect(parse(input)).toEqual({ type: "remind_delete", id: 3 });
+])("廃止した取消コマンドは正規化後も無視する: %s", (input) => {
+  expect(parse(input)).toEqual({ type: "ignore" });
 });
 
-test("取消IDの最大安全整数を受け付ける", () => {
-  expect(parse("リマインド削除 9007199254740991")).toEqual({
-    type: "remind_delete",
-    id: 9007199254740991,
-  });
+test("廃止した取消コマンドは最大安全整数でも無視する", () => {
+  expect(parse("リマインド削除 9007199254740991")).toEqual({ type: "ignore" });
 });
 
 test.each([

@@ -2,7 +2,11 @@ import type { parseReminderAction } from "../domain/reminder-action";
 import type { Reply } from "../domain/reply";
 import { REPLY_TEXT } from "../messages";
 import type { createRemindersRepo } from "../repo/reminders";
-import { reminderPageReply } from "./replies";
+import {
+  formatTokyoTime,
+  reminderPageReply,
+  reminderResultText,
+} from "./replies";
 
 type Input = Readonly<{ groupId: string; now: Date }>;
 export async function handleReminderAction(
@@ -23,9 +27,10 @@ export async function handleReminderAction(
     action.id,
     input.now,
   );
-  const text =
-    result === "missing"
-      ? REPLY_TEXT.missingReminder(action.id)
-      : REPLY_TEXT[result](action.id);
-  return text;
+  if (result.status === "missing") return REPLY_TEXT.missingReminder;
+  return reminderResultText(
+    REPLY_TEXT[result.status],
+    result.content,
+    REPLY_TEXT.reminderTimeSuffix(formatTokyoTime(result.remindAt)),
+  );
 }

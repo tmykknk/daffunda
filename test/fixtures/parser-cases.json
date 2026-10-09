@@ -178,24 +178,21 @@
     "id": "P-24",
     "input": "リマインド削除 3",
     "expect": {
-      "type": "remind_delete",
-      "id": 3
+      "type": "ignore"
     }
   },
   {
     "id": "P-25",
     "input": "リマインド削除",
     "expect": {
-      "type": "usage",
-      "command": "remind_delete"
+      "type": "ignore"
     }
   },
   {
     "id": "P-26",
     "input": "リマインド削除 abc",
     "expect": {
-      "type": "usage",
-      "command": "remind_delete"
+      "type": "ignore"
     }
   },
   {

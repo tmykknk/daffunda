@@ -165,7 +165,7 @@ test("Flexは5件と最大内部IDを通し、上限・不正値は送信前に�
 });
 
 // 公式「Flex Message」「テキスト（wrap/maxLines）」「ポストバックアクション」。
-test("I2一覧は内容・日時・ID・取消と次ページを一つのFlexに保持する", async () => {
+test("一覧はIDを表示せず日時の右に取消ボタンを配置する", async () => {
   const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
     async () => ({ ok: true, status: 200 }),
   );
@@ -206,16 +206,29 @@ test("I2一覧は内容・日時・ID・取消と次ページを一つのFlexに
                     wrap: true,
                     maxLines: 2,
                   },
-                  { type: "text", text: "10/4(日) 09:00", wrap: true },
-                  { type: "text", text: "#9007199254740991", wrap: true },
                   {
-                    type: "button",
-                    height: "sm",
-                    action: {
-                      type: "postback",
-                      label: "取消",
-                      data: "reminder:v1:cancel:9007199254740991",
-                    },
+                    type: "box",
+                    layout: "horizontal",
+                    alignItems: "center",
+                    spacing: "sm",
+                    contents: [
+                      {
+                        type: "text",
+                        text: "10/4(日) 09:00",
+                        wrap: true,
+                        flex: 1,
+                      },
+                      {
+                        type: "button",
+                        height: "sm",
+                        flex: 0,
+                        action: {
+                          type: "postback",
+                          label: "取消",
+                          data: "reminder:v1:cancel:9007199254740991",
+                        },
+                      },
+                    ],
                   },
                 ],
               },

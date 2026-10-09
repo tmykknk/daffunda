@@ -16,7 +16,7 @@ type Repositories = Readonly<{
   items: ReturnType<typeof createItemsRepo>;
   reminders: Pick<
     ReturnType<typeof createRemindersRepo>,
-    "create" | "listUnsent" | "cancel"
+    "create" | "listUnsent"
   >;
 }>;
 type Request = Readonly<{
@@ -84,7 +84,7 @@ async function registerReminder(
     retryKey: null,
     now: input.now,
   });
-  return registrationReply(row.id, formatTokyoTime(row.remind_at), row.content);
+  return registrationReply(formatTokyoTime(row.remind_at), row.content);
 }
 
 async function listItems(
@@ -96,16 +96,6 @@ async function listItems(
     rows.map((row) => REPLY_TEXT.item(row.name)),
     MESSAGES.emptyItems,
   );
-}
-
-async function cancelReminder(
-  id: number,
-  input: Request,
-  repo: Repositories["reminders"],
-): Promise<string> {
-  return (await repo.cancel(input.groupId, id, input.now))
-    ? REPLY_TEXT.canceled(id)
-    : REPLY_TEXT.missingReminder(id);
 }
 
 async function executeCommand(
@@ -126,8 +116,6 @@ async function executeCommand(
       );
     case "reminder":
       return registerReminder(command.raw, input, repos.reminders);
-    case "remind_delete":
-      return cancelReminder(command.id, input, repos.reminders);
     case "help":
       return MESSAGES.help;
     case "usage":

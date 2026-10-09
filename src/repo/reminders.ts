@@ -10,6 +10,14 @@ import {
 import { firstRow, parseRows, utcTimestamp } from "./rows";
 import { claimedSchema, reminderSchema } from "./schemas";
 
+type CancellationResult =
+  | Readonly<{ status: "missing" }>
+  | Readonly<{
+      status: "canceled" | "alreadyCanceled" | "alreadySent";
+      content: string;
+      remindAt: string;
+    }>;
+
 type ClaimedReminder = v.InferOutput<typeof claimedSchema>;
 type NewReminder = Readonly<{
   groupId: string;
@@ -70,16 +78,11 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
         .bind(group, ...scopeBindings(scope));
       return executeRows(db, result, reminderSchema, scope);
     },
-    async cancel(group: string, id: number, now: Date) {
-      const result = await db
-        .prepare(
-          "UPDATE reminders SET status = 'canceled', updated_at = ?, claim_token = NULL WHERE group_id = ? AND id = ? AND status IN ('pending', 'sending', 'failed') AND (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?))",
-        )
-        .bind(utcTimestamp(now), group, id, ...scopeBindings(scope));
-      const results = await executeStatements(db, [result], scope);
-      return results[0]?.meta.changes === 1;
-    },
-    async cancelForButton(group: string, id: number, now: Date) {
+    async cancelForButton(
+      group: string,
+      id: number,
+      now: Date,
+    ): Promise<CancellationResult> {
       const update = db
         .prepare(
           "UPDATE reminders SET status = 'canceled', updated_at = ?, claim_token = NULL WHERE group_id = ? AND id = ? AND status IN ('pending', 'sending', 'failed') AND (? IS NULL OR EXISTS (SELECT 1 FROM processed_events WHERE event_id = ? AND operation_key = ?))",
@@ -93,10 +96,14 @@ export function createRemindersRepo(db: D1Database, scope?: EventScope) {
       // 状態案内もイベント記録・取消と同じバッチで確定し、競合するsentを上書きしない。
       const results = await executeStatements(db, [update, select], scope);
       const row = parseRows(reminderSchema, results[1]?.results ?? [])[0];
-      if (results[0]?.meta.changes === 1) return "canceled";
-      if (row?.status === "canceled") return "alreadyCanceled";
-      if (row?.status === "sent") return "alreadySent";
-      return "missing";
+      if (!row) return { status: "missing" };
+      const target = { content: row.content, remindAt: row.remind_at };
+      if (results[0]?.meta.changes === 1)
+        return { status: "canceled", ...target };
+      if (row.status === "canceled")
+        return { status: "alreadyCanceled", ...target };
+      if (row.status === "sent") return { status: "alreadySent", ...target };
+      return { status: "missing" };
     },
     async claimDue(now: Date, group: string) {
       const timestamp = utcTimestamp(now);

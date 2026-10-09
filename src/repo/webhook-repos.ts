@@ -19,7 +19,6 @@ export function createWebhookRepos(db: D1Database, eventId: string, now: Date) {
     reminders: {
       create: reminders.create,
       listUnsent: reminders.listUnsent,
-      cancel: reminders.cancel,
       cancelForButton: reminders.cancelForButton,
     },
     async finish() {

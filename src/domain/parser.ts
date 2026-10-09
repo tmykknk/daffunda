@@ -7,13 +7,12 @@ import {
 import { normalizeText } from "./normalize";
 
 type ItemCommand = "add" | "remove";
-type UsageCommand = ItemCommand | "reminder" | "remind_delete";
+type UsageCommand = ItemCommand | "reminder";
 type ParseResult =
   | Readonly<{ type: ItemCommand; items: readonly string[] }>
   | Readonly<{
       type: "list" | "help" | "remind_list" | "limit_error" | "ignore";
     }>
-  | Readonly<{ type: "remind_delete"; id: number }>
   | Readonly<{ type: "reminder"; raw: string }>
   | Readonly<{ type: "usage"; command: UsageCommand }>
   | Readonly<{ type: "reserved_word"; words: readonly string[] }>;
@@ -41,21 +40,6 @@ function parseItems(raw: string, command: ItemCommand): ParseResult {
   }
 }
 
-function parseReminderDeletion(text: string): ParseResult {
-  const [command, ...argumentsList] = text.split(/\s+/u);
-  if (command !== COMMANDS.remindDelete) return { type: "ignore" };
-  const argument = argumentsList[0] ?? "";
-  const id = Number(argument);
-  if (
-    argumentsList.length !== 1 ||
-    !/^\d+$/u.test(argument) ||
-    !Number.isSafeInteger(id) ||
-    id <= 0
-  )
-    return { type: "usage", command: "remind_delete" };
-  return { type: "remind_delete", id };
-}
-
 function parseNamedCommand(text: string): ParseResult {
   switch (text) {
     case COMMANDS.list:
@@ -66,7 +50,7 @@ function parseNamedCommand(text: string): ParseResult {
     case COMMANDS.remindList:
       return { type: "remind_list" };
     default:
-      return parseReminderDeletion(text);
+      return { type: "ignore" };
   }
 }
 

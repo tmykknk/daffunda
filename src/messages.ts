@@ -8,12 +8,11 @@ export const MESSAGES = Object.freeze({
     "このページの予定はありません。リマインドで一覧を更新してください",
   emptyReminders: "未送信リマインダーはありません",
   limitError: `1メッセージは${MAX_ITEMS_PER_MESSAGE}品目まで、品目名は${MAX_ITEM_NAME_LENGTH}文字までです`,
-  help: "+テスト品目: 追加\n-テスト品目: 削除\nリスト / りすと: 買い物一覧\n/テスト 明日15時: 単発リマインダー登録\nリマインド: 未送信一覧\nリマインド削除 3: 取消\nヘルプ: 使い方",
+  help: "+テスト品目: 追加\n-テスト品目: 削除\nリスト / りすと: 買い物一覧\n/テスト 明日15時: 単発リマインダー登録\nリマインド: 未送信一覧（取消は一覧のボタンから）\nヘルプ: 使い方",
   usage: Object.freeze({
     add: "使用例: +テスト品目",
     remove: "使用例: -テスト品目",
     reminder: "使用例: /テスト 明日15時",
-    remind_delete: "使用例: リマインド削除 3",
   }),
   reminderErrors: Object.freeze({
     PAST: "過去の日時は登録できません",
@@ -36,16 +35,16 @@ export const REPLY_TEXT = Object.freeze({
     `その名前は使えません: ${words.join("、")}`,
   item: (name: string) => `・${name}`,
   omitted: (count: number) => `…他${count}件`,
-  registrationPrefix: (id: number) => `登録 #${id}: `,
-  registrationSuffix: (id: number, time: string) =>
-    ` → ${time}\n取消: リマインド削除 ${id}`,
+  registrationPrefix: "登録: ",
+  registrationSuffix: (time: string) =>
+    ` → ${time}\n取消は「リマインド」の一覧から`,
+  reminderTimeSuffix: (time: string) => ` → ${time}`,
   cancelButton: "取消",
   reminderListTitle: "未送信リマインダー一覧",
-  reminderId: (id: number) => `#${id}`,
   nextReminderPage: "次のページ",
-  alreadyCanceled: (id: number) => `すでに取消済みです: #${id}`,
-  alreadySent: (id: number) => `すでに送信済みです: #${id}`,
-  canceled: (id: number) => `取消: #${id}`,
-  missingReminder: (id: number) => `見つからない: #${id}`,
+  alreadyCanceled: "すでに取消済みです: ",
+  alreadySent: "すでに送信済みです: ",
+  canceled: "取消: ",
+  missingReminder: "対象のリマインダーが見つかりません",
   truncated: "…",
 });
