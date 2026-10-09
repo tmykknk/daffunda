@@ -254,3 +254,68 @@ test("一覧はIDを表示せず日時の右に取消ボタンを配置する", 
     ],
   });
 });
+
+// 公式「Flex Message」「テキスト」「ポストバックアクション」: 画面にはIDを出さない。
+test("買い物Flexは5件・長いID・次ページを送り、不正な一覧は送信前に拒否する", async () => {
+  const fetcher = vi.fn<NonNullable<Parameters<typeof createReplyClient>[0]>>(
+    async () => ({ ok: true, status: 200 }),
+  );
+  const reply = createReplyClient(fetcher);
+  const row = { id: Number.MAX_SAFE_INTEGER, name: "😀".repeat(50) };
+  const list = {
+    type: "item_list",
+    items: Array.from({ length: 5 }, () => row),
+    nextOffset: 5,
+  } satisfies Parameters<typeof reply>[2];
+  await reply("test-token", "test-reply", list);
+  const body = fetcher.mock.calls[0]?.[1].body;
+  if (!body) throw new Error("送信なし");
+  expect(new TextEncoder().encode(body).byteLength).toBeLessThan(30_000);
+  expect(JSON.parse(body)).toMatchObject({
+    messages: [
+      {
+        contents: {
+          body: {
+            contents: list.items.map(() => ({
+              layout: "horizontal",
+              contents: [
+                { type: "text", text: row.name, wrap: true },
+                {
+                  type: "button",
+                  action: {
+                    label: "削除",
+                    data: "item:v1:remove:9007199254740991",
+                  },
+                },
+              ],
+            })),
+          },
+          footer: { contents: [{ action: { data: "item:v1:page:5" } }] },
+        },
+      },
+    ],
+  });
+  expect(body).not.toContain("displayText");
+  expect(body).not.toContain("#9007199254740991");
+  expect(body).not.toContain("maxLines");
+  fetcher.mockClear();
+  for (const items of [
+    [],
+    Array.from({ length: 6 }, () => row),
+    ...[
+      { ...row, name: "" },
+      { ...row, name: "😀".repeat(51) },
+      { ...row, id: 0 },
+      { ...row, id: 1.5 },
+      { ...row, id: Number.MAX_SAFE_INTEGER + 1 },
+    ].map((item) => [item]),
+  ])
+    await expect(
+      reply("test-token", "test-reply", { ...list, items }),
+    ).rejects.toThrow("LINE_REPLY_INVALID");
+  for (const nextOffset of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
+    await expect(
+      reply("test-token", "test-reply", { ...list, nextOffset }),
+    ).rejects.toThrow("LINE_REPLY_INVALID");
+  expect(fetcher).not.toHaveBeenCalled();
+});

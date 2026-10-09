@@ -6,8 +6,8 @@ import { MESSAGES, REPLY_TEXT } from "../messages";
 import type { createItemsRepo } from "../repo/items";
 import type { createRemindersRepo } from "../repo/reminders";
 import {
-  boundedList,
   formatTokyoTime,
+  itemPageReply,
   registrationReply,
   reminderPageReply,
 } from "./replies";
@@ -87,17 +87,6 @@ async function registerReminder(
   return registrationReply(formatTokyoTime(row.remind_at), row.content);
 }
 
-async function listItems(
-  groupId: string,
-  repo: Repositories["items"],
-): Promise<string> {
-  const rows = await repo.list(groupId);
-  return boundedList(
-    rows.map((row) => REPLY_TEXT.item(row.name)),
-    MESSAGES.emptyItems,
-  );
-}
-
 async function executeCommand(
   command: Command,
   input: Request,
@@ -108,7 +97,7 @@ async function executeCommand(
     case "remove":
       return modifyItems(command, input, repos.items);
     case "list":
-      return listItems(input.groupId, repos.items);
+      return itemPageReply(await repos.items.list(input.groupId), 0);
     case "remind_list":
       return reminderPageReply(
         await repos.reminders.listUnsent(input.groupId),

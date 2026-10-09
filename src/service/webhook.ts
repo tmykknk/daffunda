@@ -1,8 +1,10 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import * as v from "valibot";
 import { HTTP_STATUS } from "../constants";
+import { parseItemAction } from "../domain/item-action";
 import { parse } from "../domain/parser";
 import { parseReminderAction } from "../domain/reminder-action";
+import type { Reply } from "../domain/reply";
 import type { createReplyClient } from "../line/reply";
 import { verifySignature } from "../line/verify";
 import {
@@ -16,6 +18,7 @@ import { logRejected } from "../logger";
 import { DuplicateEvent } from "../repo/event-operation";
 import { createWebhookRepos } from "../repo/webhook-repos";
 import { handleReply } from "./commands";
+import { handleItemAction } from "./item-actions";
 import { handleReminderAction } from "./reminder-actions";
 
 export type WebhookBindings = Readonly<{
@@ -31,6 +34,7 @@ export type WebhookOptions = Readonly<{
 type CommandEvent = Readonly<{
   payload:
     | NonNullable<ReturnType<typeof parseReminderAction>>
+    | NonNullable<ReturnType<typeof parseItemAction>>
     | Readonly<{ type: "text"; text: string }>;
   groupId: string;
   userId: string | null;
@@ -51,10 +55,14 @@ function permitted(event: WebhookEvent, allowed: string | undefined): boolean {
   return false;
 }
 
+// 公式「ポストバックイベント」「共通プロパティ」: 操作も署名・active・所属検証を通す。
 function commandPayload(event: WebhookEvent): CommandEvent["payload"] | null {
   if (event.type === "postback") {
     const decoded = v.safeParse(postbackSchema, event.postback);
-    return decoded.success ? parseReminderAction(decoded.output.data) : null;
+    return decoded.success
+      ? (parseReminderAction(decoded.output.data) ??
+          parseItemAction(decoded.output.data))
+      : null;
   }
   if (event.type !== "message") return null;
   const parsed = v.safeParse(textMessageSchema, event.message);
@@ -103,10 +111,25 @@ async function respondToCommand(
   const repos = createWebhookRepos(env.DB, event.eventId, now);
   try {
     const input = { groupId: event.groupId, userId: event.userId, now };
-    const reply =
-      event.payload.type === "text"
-        ? await handleReply({ ...input, text: event.payload.text }, repos)
-        : await handleReminderAction(event.payload, input, repos.reminders);
+    let reply: Reply | null;
+    switch (event.payload.type) {
+      case "text":
+        reply = await handleReply(
+          { ...input, text: event.payload.text },
+          repos,
+        );
+        break;
+      case "remove_item":
+      case "item_page":
+        reply = await handleItemAction(event.payload, input, repos.items);
+        break;
+      default:
+        reply = await handleReminderAction(
+          event.payload,
+          input,
+          repos.reminders,
+        );
+    }
     await repos.finish();
     if (reply)
       await options.reply(

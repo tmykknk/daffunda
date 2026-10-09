@@ -1,7 +1,7 @@
 import {
+  LIST_PAGE_SIZE,
   MAX_TEXT_MESSAGE_LENGTH,
   MILLISECONDS_PER_MINUTE,
-  REMINDER_PAGE_SIZE,
   REMINDER_PREVIEW_LENGTH,
   TOKYO_OFFSET_MINUTES,
   WEEKDAY_NAMES,
@@ -16,23 +16,6 @@ export function formatTokyoTime(instant: string): string {
   const hour = String(date.getUTCHours()).padStart(2, "0");
   const minute = String(date.getUTCMinutes()).padStart(2, "0");
   return `${date.getUTCMonth() + 1}/${date.getUTCDate()}(${WEEKDAY_NAMES.charAt(date.getUTCDay())}) ${hour}:${minute}`;
-}
-
-// 公式「テキストメッセージ」: UTF-16で5000以内。行を分断せず残り件数を返す。
-export function boundedList(lines: readonly string[], empty: string): string {
-  if (!lines.length) return empty;
-  const included: string[] = [];
-  for (const [index, line] of lines.entries()) {
-    const candidate = [...included, line].join("\n");
-    const remaining = lines.length - index - 1;
-    const withSuffix = remaining
-      ? `${candidate}\n${REPLY_TEXT.omitted(remaining)}`
-      : candidate;
-    if (withSuffix.length > MAX_TEXT_MESSAGE_LENGTH)
-      return [...included, REPLY_TEXT.omitted(lines.length - index)].join("\n");
-    included.push(line);
-  }
-  return included.join("\n");
 }
 
 function shortenContent(content: string, maximum: number): string {
@@ -79,7 +62,7 @@ export function reminderPageReply(
   rows: readonly Readonly<{ id: number; remind_at: string; content: string }>[],
   offset: number,
 ): Reply {
-  const page = rows.slice(offset, offset + REMINDER_PAGE_SIZE);
+  const page = rows.slice(offset, offset + LIST_PAGE_SIZE);
   if (!page.length)
     return offset ? MESSAGES.emptyReminderPage : MESSAGES.emptyReminders;
   const next = offset + page.length;
@@ -91,5 +74,20 @@ export function reminderPageReply(
       content: shortenContent(row.content, REMINDER_PREVIEW_LENGTH),
     })),
     nextOffset: next < rows.length ? next : null,
+  };
+}
+
+export function itemPageReply(
+  rows: readonly Readonly<{ id: number; name: string }>[],
+  offset: number,
+): Reply {
+  const page = rows.slice(offset, offset + LIST_PAGE_SIZE);
+  if (!page.length)
+    return offset ? MESSAGES.emptyItemPage : MESSAGES.emptyItems;
+  return {
+    type: "item_list",
+    items: page.map(({ id, name }) => ({ id, name })),
+    nextOffset:
+      offset + page.length < rows.length ? offset + page.length : null,
   };
 }

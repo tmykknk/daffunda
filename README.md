@@ -174,7 +174,7 @@ LINE の設定、デプロイ、groupId の取得、実機確認は `docs/line-s
 |---|---|
 | `+テスト品目A テスト品目B` | 品目を追加。空白・改行で区切る |
 | `-テスト品目A` | 品目を削除 |
-| `リスト` / `りすと` | 買い物一覧 |
+| `リスト` / `りすと` | 追加順5件ずつ、品目名と右側の削除ボタンを一つのFlexに表示 |
 | `/テスト 明日15時` | 単発リマインダーを登録し、解釈した日時と番号を返信 |
 | `リマインド` | 未送信の予定を5件ずつ、内容・日時・取消ボタンを一つのFlexに表示（失敗・送信処理中も含む） |
 | `ヘルプ` | 使い方 |
@@ -217,6 +217,7 @@ TZ=Asia/Tokyo mise exec -- pnpm check
 
 - Webhookと毎分Cronは許可グループだけを対象にします。許可IDが未設定・仮値なら業務更新・送信は行いません。`GET /health`は固定の疎通文だけを返します。
 - 許可外の予定は保持します。再許可すると送信対象になり得るため、許可ID変更前に旧グループの不要な予定を取り消してください。宛先・本文・再試行キーは新グループへ書き換えません。
+- 買い物一覧も5件ずつ表示し、品目名の右の削除ボタンで操作できます。`-品目名`も使えます。削除結果は品目名付きで返し、最新一覧は「リスト」で取得します。品目名は折り返して全文表示します。古いボタンで同名の再登録品目は削除されません。
 - 内部IDは画面に表示せず、空の一覧でもリセット・再利用しません。登録確認はテキストだけです。一覧の取消ボタンから手入力なしで取り消せます。内容は最大2行で省略し、DB本文は保持します。取消ボタンは日時の右側です。取消後は内容・日時付きの結果テキストだけを返し、最新一覧は「リマインド」で取得します。文字取消コマンドは廃止し、入力しても返信しません。
 - Cronは5分超の送信滞留を復旧し、同じ再試行キーで再送します。Push失敗は最大3回、初回claimから24時間以降は重複防止のため停止します。`sent`はLINEの受理を表し、端末への配送保証ではありません。送信開始済みのPushは取消で巻き戻せません。
 - DB更新はイベント記録と原子的ですが、Reply送信とは原子的ではありません。更新成功後に返信だけ失敗する可能性があります。一覧の内容・長い返信・Pushは表示用に省略し、DBの内容は保持します。「次のページ」で続き、途中の追加・取消後は「リマインド」で更新してください。
@@ -236,7 +237,7 @@ A shopping-list and one-time reminder bot for a LINE group, built with Cloudflar
 |---|---|
 | `+テスト品目A テスト品目B` | Add items separated by whitespace/newlines |
 | `-テスト品目A` | Remove an item |
-| `リスト` / `りすと` | Show the shopping list |
+| `リスト` / `りすと` | Show five items per page in insertion order, with removal buttons on the right |
 | `/テスト 明日15時` | Register a one-time reminder for tomorrow at 15:00 JST |
 | `リマインド` | List unsent reminders in pages of five in one Flex message with content, JST time, and cancellation buttons to the right of the time (including sending/failed entries) |
 | `ヘルプ` | Show usage |
@@ -277,6 +278,8 @@ The suite checks types, lint, unused code, dependencies, duplication, guards, an
 ### Operational limits
 
 Only the allowed group is processed by Webhook and the minute-based Cron. Missing/placeholder group settings prevent business mutations and sending. `GET /health` returns a fixed readiness text. Disallowed reminders remain stored and may become eligible if that group is allowed again: cancel unwanted old-group reminders before changing the setting. Stored recipients, bodies, and retry keys are never rewritten to the new group.
+
+Shopping lists show five items per page with removal buttons on the right and full wrapped names. The `-品目名` command remains available. Removal replies include the name; refresh with `リスト`. Old buttons cannot remove a newly added item with the same name.
 
 Internal IDs are hidden and are not reset/reused when the list becomes empty. Registration confirmations are text only. Lists have cancellation buttons that retain the internal ID; content is previewed in at most two lines without changing stored content. Cancellation replies contain the result, content, and JST time; send `リマインド` again for the current list. The text cancellation command has been removed and is ignored. Cron recovers sending entries after more than five minutes and reuses the same retry key. Push failures stop after three attempts; retries stop 24 hours after the first claim to avoid duplicates. LINE acceptance does not guarantee delivery. Cancellation cannot undo an already-started Push. Event records and business updates are atomic, but Reply delivery is separate and can fail after the update succeeds. List previews and long messages are shortened without changing stored content. Use the next-page button, or refresh with `リマインド` after adding/canceling entries.
 
