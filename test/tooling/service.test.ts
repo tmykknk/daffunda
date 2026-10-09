@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as v from "valibot";
 import { expect, test, vi } from "vitest";
-import { handleReply, handleText } from "../../src/service/commands";
+import { handleReply } from "../../src/service/commands";
 
 const cases = v.parse(
   v.array(v.object({ input: v.string(), expect: v.nullable(v.string()) })),
@@ -27,7 +27,7 @@ const repos = {
 for (const row of cases) {
   test(`serviceの静的応答: ${row.input.slice(0, 24)}`, async () => {
     expect(
-      await handleText(
+      await handleReply(
         { text: row.input, groupId: "C_test_group_1", userId: null, now },
         repos,
       ),
@@ -35,7 +35,7 @@ for (const row of cases) {
   });
 }
 test("ヘルプには全コマンドと単発リマインダーの説明を含める", async () => {
-  const response = await handleText(
+  const response = await handleReply(
     { text: "ヘルプ", groupId: "C_test_group_1", userId: null, now },
     repos,
   );
@@ -54,7 +54,7 @@ test("ヘルプには全コマンドと単発リマインダーの説明を含�
 
 test("DBエラーは成功返信へ変換せず呼び出し元へ伝える", async () => {
   await expect(
-    handleText(
+    handleReply(
       { text: "+テスト品目", groupId: "C_test_group_1", userId: null, now },
       repos,
     ),
