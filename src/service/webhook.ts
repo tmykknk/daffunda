@@ -99,6 +99,26 @@ async function handleEvent(
   );
 }
 
+async function executeEvent(
+  event: CommandEvent,
+  now: Date,
+  repos: ReturnType<typeof createWebhookRepos>,
+): Promise<Reply | null> {
+  const input = { groupId: event.groupId, userId: event.userId, now };
+  switch (event.payload.type) {
+    case "text":
+      return handleReply({ ...input, text: event.payload.text }, repos);
+    case "remove_item":
+    case "item_page":
+      return handleItemAction(event.payload, input, repos.items);
+    case "cancel":
+    case "page":
+      return handleReminderAction(event.payload, input, repos.reminders);
+    default:
+      return event.payload satisfies never;
+  }
+}
+
 // 公式「応答メッセージを送る」: 業務確定後、受信したtokenを速やかに一度だけ使う。
 async function respondToCommand(
   event: CommandEvent,
@@ -110,26 +130,7 @@ async function respondToCommand(
   const now = options.now();
   const repos = createWebhookRepos(env.DB, event.eventId, now);
   try {
-    const input = { groupId: event.groupId, userId: event.userId, now };
-    let reply: Reply | null;
-    switch (event.payload.type) {
-      case "text":
-        reply = await handleReply(
-          { ...input, text: event.payload.text },
-          repos,
-        );
-        break;
-      case "remove_item":
-      case "item_page":
-        reply = await handleItemAction(event.payload, input, repos.items);
-        break;
-      default:
-        reply = await handleReminderAction(
-          event.payload,
-          input,
-          repos.reminders,
-        );
-    }
+    const reply = await executeEvent(event, now, repos);
     await repos.finish();
     if (reply)
       await options.reply(
