@@ -7,7 +7,7 @@ import { createReplyClient } from "../src/line/reply";
 import { createItemsRepo } from "../src/repo/items";
 import { createEventsRepo } from "../src/repo/processed-events";
 import { createRemindersRepo } from "../src/repo/reminders";
-import { handleText } from "../src/service/commands";
+import { handleReply } from "../src/service/commands";
 import { sendDueReminders } from "../src/service/scheduled";
 import type { WebhookBindings } from "../src/service/webhook";
 
@@ -321,7 +321,7 @@ test("不正なD1行を内部データとして返さない", async () => {
 });
 
 const reply = (text: string, groupId = group) =>
-  handleText(
+  handleReply(
     { text, groupId, userId: user, now },
     { items: items(), reminders: reminders() },
   );
@@ -360,7 +360,11 @@ test("serviceの登録・一覧・取消はJST日時と自グループのIDを�
   expect(await reply("/テスト 明日15時")).toBe(
     "登録 #1: テスト → 10/4(日) 15:00\n取消: リマインド削除 1",
   );
-  expect(await reply("リマインド")).toBe("#1 10/4(日) 15:00 テスト");
+  expect(await reply("リマインド")).toEqual({
+    type: "reminder_list",
+    reminders: [{ id: 1, content: "テスト", time: "10/4(日) 15:00" }],
+    nextOffset: null,
+  });
   expect(await reply("リマインド削除 1", otherGroup)).toBe("見つからない: #1");
   expect(await reply("リマインド削除 1")).toBe("取消: #1");
   expect(await reply("リマインド削除 1")).toBe("見つからない: #1");
@@ -370,11 +374,19 @@ test("serviceの登録・一覧・取消はJST日時と自グループのIDを�
 test("serviceは長い登録の内容を保持して確認文だけ短縮する", async () => {
   const content = "😀".repeat(3000);
   const response = await reply(`/${content} 明日15時`);
-  expect(response?.length).toBeLessThanOrEqual(5000);
+  if (typeof response !== "string")
+    throw new Error("テキスト返信ではありません");
+  expect(response.length).toBeLessThanOrEqual(5000);
   expect(response).toMatch(/^登録 #1: 😀/u);
   expect(response).toContain("… → 10/4(日) 15:00\n取消: リマインド削除 1");
   expect((await reminders().listUnsent(group))[0]?.content).toBe(content);
-  expect(await reply("リマインド")).toBe("…他1件");
+  expect(await reply("リマインド")).toEqual({
+    type: "reminder_list",
+    reminders: [
+      { id: 1, content: `${"😀".repeat(149)}…`, time: "10/4(日) 15:00" },
+    ],
+    nextOffset: null,
+  });
 });
 
 test("serviceは既存の同名複数行を入力件数分だけ削除する", async () => {
@@ -395,7 +407,8 @@ test("serviceの長い買い物一覧は行を省略し、件数とUTF-16上限�
   );
   await items().add(group, names, null, now);
   const response = await reply("リスト");
-  if (!response) throw new Error("返信が空です");
+  if (typeof response !== "string")
+    throw new Error("テキスト返信ではありません");
   const included = response.split("\n").length - 1;
   expect(response.length).toBeLessThanOrEqual(5000);
   expect(response).toBe(
@@ -411,9 +424,14 @@ test("serviceのリマインダー一覧は期限順で他グループを表示�
   await reply("/後のテスト 明後日");
   await reply("/先のテスト 明日");
   await reply("/別のテスト 明日", otherGroup);
-  expect(await reply("リマインド")).toBe(
-    "#2 10/4(日) 09:00 先のテスト\n#1 10/5(月) 09:00 後のテスト",
-  );
+  expect(await reply("リマインド")).toEqual({
+    type: "reminder_list",
+    reminders: [
+      { id: 2, content: "先のテスト", time: "10/4(日) 09:00" },
+      { id: 1, content: "後のテスト", time: "10/5(月) 09:00" },
+    ],
+    nextOffset: null,
+  });
 });
 
 const testSecret = "test-channel-secret";

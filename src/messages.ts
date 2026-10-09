@@ -36,8 +36,6 @@ export const REPLY_TEXT = Object.freeze({
     `その名前は使えません: ${words.join("、")}`,
   item: (name: string) => `・${name}`,
   omitted: (count: number) => `…他${count}件`,
-  reminder: (id: number, time: string, content: string) =>
-    `#${id} ${time} ${content}`,
   registrationPrefix: (id: number) => `登録 #${id}: `,
   registrationSuffix: (id: number, time: string) =>
     ` → ${time}\n取消: リマインド削除 ${id}`,

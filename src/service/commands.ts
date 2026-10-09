@@ -98,19 +98,6 @@ async function listItems(
   );
 }
 
-async function listReminders(
-  groupId: string,
-  repo: Repositories["reminders"],
-): Promise<string> {
-  const rows = await repo.listUnsent(groupId);
-  return boundedList(
-    rows.map((row) =>
-      REPLY_TEXT.reminder(row.id, formatTokyoTime(row.remind_at), row.content),
-    ),
-    MESSAGES.emptyReminders,
-  );
-}
-
 async function cancelReminder(
   id: number,
   input: Request,
@@ -125,7 +112,7 @@ async function executeCommand(
   command: Command,
   input: Request,
   repos: Repositories,
-): Promise<string | null> {
+): Promise<Reply | null> {
   switch (command.type) {
     case "add":
     case "remove":
@@ -133,7 +120,10 @@ async function executeCommand(
     case "list":
       return listItems(input.groupId, repos.items);
     case "remind_list":
-      return listReminders(input.groupId, repos.reminders);
+      return reminderPageReply(
+        await repos.reminders.listUnsent(input.groupId),
+        0,
+      );
     case "reminder":
       return registerReminder(command.raw, input, repos.reminders);
     case "remind_delete":
@@ -153,22 +143,9 @@ async function executeCommand(
   }
 }
 
-export function handleText(
-  input: Request,
-  repos: Repositories,
-): Promise<string | null> {
-  return executeCommand(parse(input.text), input, repos);
-}
-
-export async function handleReply(
+export function handleReply(
   input: Request,
   repos: Repositories,
 ): Promise<Reply | null> {
-  const command = parse(input.text);
-  if (command.type === "remind_list")
-    return reminderPageReply(
-      await repos.reminders.listUnsent(input.groupId),
-      0,
-    );
-  return executeCommand(command, input, repos);
+  return executeCommand(parse(input.text), input, repos);
 }
