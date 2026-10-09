@@ -13,11 +13,11 @@
   },
   {
     "input": "リマインド削除",
-    "expect": "使用例: リマインド削除 3"
+    "expect": null
   },
   {
     "input": "リマインド削除 abc",
-    "expect": "使用例: リマインド削除 3"
+    "expect": null
   },
   {
     "input": "+リスト ヘルプ",

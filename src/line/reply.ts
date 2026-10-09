@@ -55,12 +55,22 @@ function reminderListMessage(reply: ReminderListReply) {
               wrap: true,
               maxLines: REMINDER_CONTENT_MAX_LINES,
             },
-            { type: "text", text: row.time, wrap: true },
-            { type: "text", text: REPLY_TEXT.reminderId(row.id), wrap: true },
-            postbackButton(
-              REPLY_TEXT.cancelButton,
-              reminderActionData({ type: "cancel", id: row.id }),
-            ),
+            {
+              type: "box",
+              layout: "horizontal",
+              alignItems: "center",
+              spacing: "sm",
+              contents: [
+                { type: "text", text: row.time, wrap: true, flex: 1 },
+                {
+                  ...postbackButton(
+                    REPLY_TEXT.cancelButton,
+                    reminderActionData({ type: "cancel", id: row.id }),
+                  ),
+                  flex: 0,
+                },
+              ],
+            },
           ],
         })),
       },

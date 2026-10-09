@@ -1,7 +1,7 @@
 # パーサーのテストケース（P-系）
 
 - 関数: parse(text) → 結果。NFKC正規化後の値を返す。かな統一（norm_name）は parser ではなく normalize.ts の責務
-- 結果の型: add{items} / remove{items} / list / help / remind_list / remind_delete{id} / reminder{raw} / usage{command} / reserved_word{words} / limit_error / ignore
+- 結果の型: add{items} / remove{items} / list / help / remind_list / reminder{raw} / usage{command} / reserved_word{words} / limit_error / ignore
 
 | ID | 入力 | 期待 |
 |---|---|---|
@@ -28,9 +28,9 @@
 | P-21 | `+ヘルプ` | reserved_word ["ヘルプ"] |
 | P-22 | `ヘルプ` | help |
 | P-23 | `リマインド` | remind_list |
-| P-24 | `リマインド削除 3` | remind_delete 3 |
-| P-25 | `リマインド削除` | usage "remind_delete" |
-| P-26 | `リマインド削除 abc` | usage "remind_delete" |
+| P-24 | `リマインド削除 3` | ignore |
+| P-25 | `リマインド削除` | ignore |
+| P-26 | `リマインド削除 abc` | ignore |
 | P-27 | `/歯医者 明日15時` | reminder raw="歯医者 明日15時" |
 | P-28 | `／歯医者　明日１５時` | reminder raw="歯医者 明日15時" |
 | P-29 | `+i01 i02 i03 i04 i05 i06 i07 i08 i09 i10 i11 i12 i13 i14 i15 i16 i17 i18 i19 i20 i21` | limit_error |

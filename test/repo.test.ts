@@ -19,6 +19,8 @@ const user = "U_test_user_1";
 const now = new Date("2026-10-03T03:00:00.000Z");
 const items = () => createItemsRepo(env.DB);
 const reminders = () => createRemindersRepo(env.DB);
+const cancel = async (groupId: string, id: number, at: Date) =>
+  (await reminders().cancelForButton(groupId, id, at)).status === "canceled";
 const events = () => createEventsRepo(env.DB);
 
 beforeEach(async () => {
@@ -162,10 +164,10 @@ test("リマインダーはUTC・状態・試行回数・retry_keyを保存し�
 
 test("取消は自グループの未送信だけに適用し、取消済みは再取消できない", async () => {
   const row = await register();
-  expect(await reminders().cancel(otherGroup, row.id, now)).toBe(false);
-  expect(await reminders().cancel(group, row.id, now)).toBe(true);
-  expect(await reminders().cancel(group, row.id, now)).toBe(false);
-  expect(await reminders().cancel(group, 999, now)).toBe(false);
+  expect(await cancel(otherGroup, row.id, now)).toBe(false);
+  expect(await cancel(group, row.id, now)).toBe(true);
+  expect(await cancel(group, row.id, now)).toBe(false);
+  expect(await cancel(group, 999, now)).toBe(false);
   expect(await reminders().listUnsent(group)).toEqual([]);
   expect(await reminders().claimDue(now, group)).toEqual([]);
 });
@@ -174,7 +176,7 @@ test("同時claimは期限到来のpendingを一度だけ取得し、未来と�
   const due = await register();
   await register("未来", new Date("2026-10-04T00:00:00.000Z"));
   const canceled = await register("取消");
-  await reminders().cancel(group, canceled.id, now);
+  await cancel(group, canceled.id, now);
   const claims = (
     await Promise.all([
       reminders().claimDue(now, group),
@@ -216,7 +218,7 @@ test("成功はsentになり、重複完了・送信済み取消・再claimは�
   if (!claimed) throw new Error("claimが空です");
   expect(await reminders().markSent(claimed, now)).toBe(true);
   expect(await reminders().markSent(claimed, now)).toBe(false);
-  expect(await reminders().cancel(group, claimed.id, now)).toBe(false);
+  expect(await cancel(group, claimed.id, now)).toBe(false);
   expect(await reminders().claimDue(now, group)).toEqual([]);
   expect(await reminders().listUnsent(group)).toEqual([]);
   const row = await env.DB.prepare(
@@ -243,7 +245,7 @@ test("失敗は1回ずつ加算し、3回でfailedになって再claimしない"
   expect(await reminders().claimDue(now, group)).toEqual([]);
   const [failed] = await reminders().listUnsent(group);
   if (!failed) throw new Error("failedが空です");
-  expect(await reminders().cancel(group, failed.id, now)).toBe(true);
+  expect(await cancel(group, failed.id, now)).toBe(true);
 });
 
 test("復旧・再claim後の古い処理は新しいclaimを上書きしない", async () => {
@@ -263,7 +265,7 @@ test("sendingの取消後に遅れて成功・失敗が届いても取消を維�
   await register();
   const [claimed] = await reminders().claimDue(now, group);
   if (!claimed) throw new Error("claimが空です");
-  expect(await reminders().cancel(group, claimed.id, now)).toBe(true);
+  expect(await cancel(group, claimed.id, now)).toBe(true);
   expect(await reminders().markSent(claimed, now)).toBe(false);
   expect(await reminders().markFailed(claimed, now)).toBe(false);
 });
@@ -358,17 +360,16 @@ test("serviceの買い物一覧は追加順で表示し、空・かなコマン�
 test("serviceの登録・一覧・取消はJST日時と自グループのIDを使う", async () => {
   expect(await reply("リマインド")).toBe("未送信リマインダーはありません");
   expect(await reply("/テスト 明日15時")).toBe(
-    "登録 #1: テスト → 10/4(日) 15:00\n取消: リマインド削除 1",
+    "登録: テスト → 10/4(日) 15:00\n取消は「リマインド」の一覧から",
   );
   expect(await reply("リマインド")).toEqual({
     type: "reminder_list",
     reminders: [{ id: 1, content: "テスト", time: "10/4(日) 15:00" }],
     nextOffset: null,
   });
-  expect(await reply("リマインド削除 1", otherGroup)).toBe("見つからない: #1");
-  expect(await reply("リマインド削除 1")).toBe("取消: #1");
-  expect(await reply("リマインド削除 1")).toBe("見つからない: #1");
-  expect(await reply("リマインド")).toBe("未送信リマインダーはありません");
+  expect(await reply("リマインド削除 1", otherGroup)).toBeNull();
+  expect(await reply("リマインド削除 1")).toBeNull();
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
 });
 
 test("serviceは長い登録の内容を保持して確認文だけ短縮する", async () => {
@@ -377,8 +378,10 @@ test("serviceは長い登録の内容を保持して確認文だけ短縮する"
   if (typeof response !== "string")
     throw new Error("テキスト返信ではありません");
   expect(response.length).toBeLessThanOrEqual(5000);
-  expect(response).toMatch(/^登録 #1: 😀/u);
-  expect(response).toContain("… → 10/4(日) 15:00\n取消: リマインド削除 1");
+  expect(response).toMatch(/^登録: 😀/u);
+  expect(response).toContain(
+    "… → 10/4(日) 15:00\n取消は「リマインド」の一覧から",
+  );
   expect((await reminders().listUnsent(group))[0]?.content).toBe(content);
   expect(await reply("リマインド")).toEqual({
     type: "reminder_list",
@@ -542,7 +545,7 @@ test("許可groupのテキストは保存し、同時再送でも登録と返信
   expect(lineReply).toHaveBeenCalledExactlyOnceWith(
     "test-access-token",
     "test-reply-token",
-    "登録 #1: テスト → 10/4(日) 15:00\n取消: リマインド削除 1",
+    "登録: テスト → 10/4(日) 15:00\n取消は「リマインド」の一覧から",
   );
 });
 test("イベント記録後の業務SQL失敗は全体を戻し、再送で欠落なく処理できる", async () => {
@@ -602,7 +605,7 @@ test("Webhookは複数イベントを順に処理し、再送でも一覧・取�
     textEvent("ヘルプ", "test-event-c"),
     textEvent("/テスト 明日", "test-event-d"),
     textEvent("リマインド", "test-event-e"),
-    textEvent("リマインド削除 1", "test-event-f"),
+    buttonEvent("reminder:v1:cancel:1", "test-event-f"),
   ];
   expect((await postEvents(input)).status).toBe(200);
   expect(lineReply).toHaveBeenCalledTimes(6);
@@ -779,7 +782,7 @@ test("Cronは同時起動でも期限到来分を一度だけ送り、未来・�
   await register("別グループ", now, otherGroup);
   await register("未来", new Date(now.getTime() + 60_000));
   const canceled = await register("取消");
-  await reminders().cancel(group, canceled.id, now);
+  await cancel(group, canceled.id, now);
   await Promise.all([runCron(), runCron()]);
   expect(push).toHaveBeenCalledTimes(1);
   expect(await reminders().listUnsent(otherGroup)).toMatchObject([
@@ -969,7 +972,7 @@ test("送信開始前に取消されたclaimを送らず、送信中の取消も
   const first = await register("最初");
   const second = await register("取消対象");
   push.mockImplementationOnce(async () => {
-    await reminders().cancel(group, second.id, now);
+    await cancel(group, second.id, now);
   });
   await runCron();
   expect(push).toHaveBeenCalledTimes(1);
@@ -978,7 +981,7 @@ test("送信開始前に取消されたclaimを送らず、送信中の取消も
   for (const outcome of ["failure", "success"]) {
     const row = await register("送信中取消");
     push.mockImplementationOnce(async () => {
-      await reminders().cancel(group, row.id, now);
+      await cancel(group, row.id, now);
       if (outcome === "failure") throw new Error("テスト本文");
     });
     await runCron();
@@ -1053,13 +1056,13 @@ test("登録失敗はイベント記録も戻し、同時再送では1件だけ�
 test("取消で一覧が空になっても内部IDを再利用せず古いIDは無効", async () => {
   const old = await register();
   if (!old) throw new Error("登録失敗");
-  expect(await reminders().cancel(group, old.id, now)).toBe(true);
+  expect(await cancel(group, old.id, now)).toBe(true);
   expect(await reminders().listUnsent(group)).toEqual([]);
   const current = await register();
   if (!current) throw new Error("登録失敗");
   expect(current.id).toBeGreaterThan(old.id);
-  expect(await reminders().cancel(group, old.id, now)).toBe(false);
-  expect(await reminders().cancel(otherGroup, current.id, now)).toBe(false);
+  expect(await cancel(group, old.id, now)).toBe(false);
+  expect(await cancel(otherGroup, current.id, now)).toBe(false);
   expect(await reminders().listUnsent(group)).toHaveLength(1);
 });
 
@@ -1237,18 +1240,22 @@ test("登録確認はテキストで、一覧と取消対象は同じ内部IDを
     (await postEvents([buttonEvent(`reminder:v1:cancel:${row.id}`)])).status,
   ).toBe(200);
   expect(await reminders().listUnsent(group)).toEqual([]);
-  expect(lineReply.mock.calls[2]?.[2]).toBe(`取消: #${row.id}`);
+  expect(lineReply.mock.calls[2]?.[2]).toBe(
+    "取消: ボタンテスト → 10/4(日) 09:00",
+  );
 });
 
 test("古い取消ボタンは新予定を取消せず、取消済み・送信済みを区別する", async () => {
   const old = await register();
-  await reminders().cancel(group, old.id, now);
+  await cancel(group, old.id, now);
   const current = await register();
   expect(current.id).toBeGreaterThan(old.id);
   await postEvents([
     buttonEvent(`reminder:v1:cancel:${old.id}`, "test-old-button"),
   ]);
-  expect(lineReply.mock.calls[0]?.[2]).toBe(`すでに取消済みです: #${old.id}`);
+  expect(lineReply.mock.calls[0]?.[2]).toBe(
+    "すでに取消済みです: テスト → 10/3(土) 12:00",
+  );
   expect(await reminders().listUnsent(group)).toHaveLength(1);
   const [claimed] = await reminders().claimDue(now, group);
   if (!claimed) throw new Error("claim失敗");
@@ -1257,7 +1264,7 @@ test("古い取消ボタンは新予定を取消せず、取消済み・送信�
     buttonEvent(`reminder:v1:cancel:${current.id}`, "test-sent-button"),
   ]);
   expect(lineReply.mock.calls[1]?.[2]).toBe(
-    `すでに送信済みです: #${current.id}`,
+    "すでに送信済みです: テスト → 10/3(土) 12:00",
   );
 });
 
@@ -1274,7 +1281,9 @@ test("ボタン操作も許可グループ・対象所属を検証し、他所�
   await postEvents([
     buttonEvent(`reminder:v1:cancel:${row.id}`, "test-wrong-owner"),
   ]);
-  expect(lineReply.mock.calls[0]?.[2]).toBe(`見つからない: #${row.id}`);
+  expect(lineReply.mock.calls[0]?.[2]).toBe(
+    "対象のリマインダーが見つかりません",
+  );
   expect(await reminders().listUnsent(otherGroup)).toHaveLength(1);
 });
 
@@ -1364,8 +1373,8 @@ test("取消ボタンはfailed・sendingも取り消し、旧Cron完了で上書
   ]);
   expect(await reminders().listUnsent(group)).toEqual([]);
   expect(lineReply.mock.calls.map((call) => call[2])).toEqual([
-    `取消: #${row.id}`,
-    `取消: #${failed.id}`,
+    "取消: テスト → 10/3(土) 12:00",
+    "取消: テスト → 10/3(土) 12:00",
   ]);
 });
 
@@ -1459,7 +1468,10 @@ test("異なるイベントの二重タップは取消成功と取消済みを�
     ]),
   ]);
   expect(lineReply.mock.calls.map((call) => call[2]).sort()).toEqual(
-    [`取消: #${row.id}`, `すでに取消済みです: #${row.id}`].sort(),
+    [
+      "取消: テスト → 10/3(土) 12:00",
+      "すでに取消済みです: テスト → 10/3(土) 12:00",
+    ].sort(),
   );
   expect(await reminders().listUnsent(group)).toEqual([]);
 });
@@ -1498,14 +1510,14 @@ test("I2登録と取消は結果テキストだけで、一覧は自動再送し
   expect(lineReply).toHaveBeenCalledExactlyOnceWith(
     "test-access-token",
     "test-reply-token",
-    "登録 #1: UIテスト → 10/4(日) 09:00\n取消: リマインド削除 1",
+    "登録: UIテスト → 10/4(日) 09:00\n取消は「リマインド」の一覧から",
   );
   lineReply.mockClear();
   await postEvents([buttonEvent("reminder:v1:cancel:1", "test-i2-cancel")]);
   expect(lineReply).toHaveBeenCalledExactlyOnceWith(
     "test-access-token",
     "test-reply-token",
-    "取消: #1",
+    "取消: UIテスト → 10/4(日) 09:00",
   );
 });
 
@@ -1535,14 +1547,19 @@ test("I2はWebhookからReplyの単一Flexまで内容・日時・対象IDを維
             contents: rows.map((row, index) => ({
               contents: [
                 { type: "text", text: row.content, wrap: true, maxLines: 2 },
-                { type: "text", text: `10/3(土) 12:0${index + 1}` },
-                { type: "text", text: `#${row.id}` },
                 {
-                  type: "button",
-                  action: {
-                    label: "取消",
-                    data: `reminder:v1:cancel:${row.id}`,
-                  },
+                  type: "box",
+                  layout: "horizontal",
+                  contents: [
+                    { type: "text", text: `10/3(土) 12:0${index + 1}` },
+                    {
+                      type: "button",
+                      action: {
+                        label: "取消",
+                        data: `reminder:v1:cancel:${row.id}`,
+                      },
+                    },
+                  ],
                 },
               ],
             })),
@@ -1553,4 +1570,36 @@ test("I2はWebhookからReplyの単一Flexまで内容・日時・対象IDを維
     ],
   });
   expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+test("廃止した文字取消コマンドはイベント記録も返信も行わない", async () => {
+  await register();
+  for (const text of [
+    "リマインド削除",
+    "リマインド削除 1",
+    "リマインド削除 abc",
+  ]) {
+    expect((await postEvents([textEvent(text)])).status).toBe(200);
+  }
+  expect(await events().get("test-webhook-1")).toBeNull();
+  expect(lineReply).not.toHaveBeenCalled();
+  expect(await reminders().listUnsent(group)).toHaveLength(1);
+});
+
+test("取消結果は長い内容と利用者の#番号を保持しつつ表示だけを短縮する", async () => {
+  const content = `#123 ${"😀".repeat(3000)}`;
+  const row = await register(content);
+  await postEvents([buttonEvent(`reminder:v1:cancel:${row.id}`)]);
+  const response = lineReply.mock.calls[0]?.[2];
+  if (typeof response !== "string")
+    throw new Error("テキスト返信ではありません");
+  expect(response.length).toBeLessThanOrEqual(5000);
+  expect(response).toMatch(/^取消: #123 😀/u);
+  expect(response).toContain("… → 10/3(土) 12:00");
+  expect(response).not.toContain("\uFFFD");
+  expect(
+    await env.DB.prepare("SELECT content FROM reminders WHERE id = ?")
+      .bind(row.id)
+      .first("content"),
+  ).toBe(content);
 });

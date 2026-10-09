@@ -176,8 +176,7 @@ LINE の設定、デプロイ、groupId の取得、実機確認は `docs/line-s
 | `-テスト品目A` | 品目を削除 |
 | `リスト` / `りすと` | 買い物一覧 |
 | `/テスト 明日15時` | 単発リマインダーを登録し、解釈した日時と番号を返信 |
-| `リマインド` | 未送信の予定を5件ずつ、内容・日時・内部ID・取消ボタンを一つのFlexに表示（失敗・送信処理中も含む） |
-| `リマインド削除 3` | 一覧・登録確認に表示された内部IDの予定を取消 |
+| `リマインド` | 未送信の予定を5件ずつ、内容・日時・取消ボタンを一つのFlexに表示（失敗・送信処理中も含む） |
 | `ヘルプ` | 使い方 |
 
 全角の記号・数字も正規化します。品目は1メッセージ20件、名前は50文字まで。追加した品目の照合ではひらがな・カタカナを統一します。雑談・画像・スタンプは無視します。
@@ -218,7 +217,7 @@ TZ=Asia/Tokyo mise exec -- pnpm check
 
 - Webhookと毎分Cronは許可グループだけを対象にします。許可IDが未設定・仮値なら業務更新・送信は行いません。`GET /health`は固定の疎通文だけを返します。
 - 許可外の予定は保持します。再許可すると送信対象になり得るため、許可ID変更前に旧グループの不要な予定を取り消してください。宛先・本文・再試行キーは新グループへ書き換えません。
-- `#番号`は内部IDです。空の一覧でもリセット・再利用しません。登録確認はテキストだけです。一覧の取消ボタンから手入力なしで取り消せます。内容は最大2行で省略し、DB本文は保持します。取消後は結果テキストだけを返し、最新一覧は「リマインド」で取得します。「リマインド削除 N」も使えます。
+- 内部IDは画面に表示せず、空の一覧でもリセット・再利用しません。登録確認はテキストだけです。一覧の取消ボタンから手入力なしで取り消せます。内容は最大2行で省略し、DB本文は保持します。取消ボタンは日時の右側です。取消後は内容・日時付きの結果テキストだけを返し、最新一覧は「リマインド」で取得します。文字取消コマンドは廃止し、入力しても返信しません。
 - Cronは5分超の送信滞留を復旧し、同じ再試行キーで再送します。Push失敗は最大3回、初回claimから24時間以降は重複防止のため停止します。`sent`はLINEの受理を表し、端末への配送保証ではありません。送信開始済みのPushは取消で巻き戻せません。
 - DB更新はイベント記録と原子的ですが、Reply送信とは原子的ではありません。更新成功後に返信だけ失敗する可能性があります。一覧の内容・長い返信・Pushは表示用に省略し、DBの内容は保持します。「次のページ」で続き、途中の追加・取消後は「リマインド」で更新してください。
 - 初回デプロイは人間が手元で行います。更新用Actionsはproduction承認設定後に人間が有効化します。公開前に[レビューチェックリスト](docs/review-checklist.md)を確認してください。
@@ -239,8 +238,7 @@ A shopping-list and one-time reminder bot for a LINE group, built with Cloudflar
 | `-テスト品目A` | Remove an item |
 | `リスト` / `りすと` | Show the shopping list |
 | `/テスト 明日15時` | Register a one-time reminder for tomorrow at 15:00 JST |
-| `リマインド` | List unsent reminders in pages of five in one Flex message with content, JST time, internal IDs, and cancellation buttons (including sending/failed entries) |
-| `リマインド削除 3` | Cancel the internal ID shown in the list or confirmation |
+| `リマインド` | List unsent reminders in pages of five in one Flex message with content, JST time, and cancellation buttons to the right of the time (including sending/failed entries) |
 | `ヘルプ` | Show usage |
 
 Full-width characters are normalized; hiragana/katakana are unified when matching item names. Up to 20 items per message and 50 Unicode code points per name are accepted. Unrecognized messages and non-text events are ignored. Dates without a time default to 09:00; ambiguous hours 1–5 mean afternoon. Relative amounts must be unsigned integers. Month/day fields have one or two digits (`03/05` is valid, `003/5` is rejected). Specify one date/time within a year. Recurring reminders are unsupported; an interpretable weekly expression schedules one occurrence. See the [specification](docs/spec.md) and [date rules](docs/reminder-cases.md).
@@ -280,6 +278,6 @@ The suite checks types, lint, unused code, dependencies, duplication, guards, an
 
 Only the allowed group is processed by Webhook and the minute-based Cron. Missing/placeholder group settings prevent business mutations and sending. `GET /health` returns a fixed readiness text. Disallowed reminders remain stored and may become eligible if that group is allowed again: cancel unwanted old-group reminders before changing the setting. Stored recipients, bodies, and retry keys are never rewritten to the new group.
 
-Reminder numbers are internal IDs and are not reset/reused when the list becomes empty. Registration confirmations are text only. Lists have cancellation buttons that retain the internal ID; content is previewed in at most two lines without changing stored content. Cancellation replies contain only the result text; send `リマインド` again for the current list. The text cancellation command remains available. Cron recovers sending entries after more than five minutes and reuses the same retry key. Push failures stop after three attempts; retries stop 24 hours after the first claim to avoid duplicates. LINE acceptance does not guarantee delivery. Cancellation cannot undo an already-started Push. Event records and business updates are atomic, but Reply delivery is separate and can fail after the update succeeds. List previews and long messages are shortened without changing stored content. Use the next-page button, or refresh with `リマインド` after adding/canceling entries.
+Internal IDs are hidden and are not reset/reused when the list becomes empty. Registration confirmations are text only. Lists have cancellation buttons that retain the internal ID; content is previewed in at most two lines without changing stored content. Cancellation replies contain the result, content, and JST time; send `リマインド` again for the current list. The text cancellation command has been removed and is ignored. Cron recovers sending entries after more than five minutes and reuses the same retry key. Push failures stop after three attempts; retries stop 24 hours after the first claim to avoid duplicates. LINE acceptance does not guarantee delivery. Cancellation cannot undo an already-started Push. Event records and business updates are atomic, but Reply delivery is separate and can fail after the update succeeds. List previews and long messages are shortened without changing stored content. Use the next-page button, or refresh with `リマインド` after adding/canceling entries.
 
 Initial deployment is manual. Optional M8 updates use GitHub Actions after main checks and production Environment approval; a human must configure reviewers, branch restrictions, Environment secrets, and the enable variable first (deployment guide F). See [decisions and limitations](docs/decisions.md), [tasks](docs/tasks.md), [conventions](docs/conventions.md), [tooling](docs/tooling.md), [review checks](docs/review-checklist.md), and the [pre-PR checklist](docs/review-checklist.md). Licensed under [MIT](LICENSE).

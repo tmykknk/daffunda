@@ -39,16 +39,9 @@ test("ヘルプには全コマンドと単発リマインダーの説明を含�
     { text: "ヘルプ", groupId: "C_test_group_1", userId: null, now },
     repos,
   );
-  for (const command of [
-    "+",
-    "-",
-    "リスト",
-    "リマインド",
-    "リマインド削除",
-    "ヘルプ",
-    "単発",
-  ])
+  for (const command of ["+", "-", "リスト", "リマインド", "ヘルプ", "単発"])
     expect(response).toContain(command);
+  expect(response).not.toContain("リマインド削除");
   expect(unavailable).not.toHaveBeenCalled();
 });
 

@@ -7,7 +7,6 @@ export const COMMANDS = Object.freeze({
   listHiragana: "りすと",
   help: "ヘルプ",
   remindList: "リマインド",
-  remindDelete: "リマインド削除",
 });
 export const RESERVED_WORDS: readonly string[] = [
   COMMANDS.list,

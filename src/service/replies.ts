@@ -47,15 +47,21 @@ function shortenContent(content: string, maximum: number): string {
   return characters.join("") + REPLY_TEXT.truncated;
 }
 
-export function registrationReply(
-  id: number,
-  time: string,
+export function reminderResultText(
+  prefix: string,
   content: string,
+  suffix: string,
 ): string {
-  const prefix = REPLY_TEXT.registrationPrefix(id);
-  const suffix = REPLY_TEXT.registrationSuffix(id, time);
   const maximum = MAX_TEXT_MESSAGE_LENGTH - prefix.length - suffix.length;
   return prefix + shortenContent(content, maximum) + suffix;
+}
+
+export function registrationReply(time: string, content: string): string {
+  return reminderResultText(
+    REPLY_TEXT.registrationPrefix,
+    content,
+    REPLY_TEXT.registrationSuffix(time),
+  );
 }
 
 // 公式「テキストメッセージ」: 接頭辞を含めたUTF-16上限で省略する。
